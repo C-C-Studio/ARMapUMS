@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jelajahi UMS - Tailwind</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+    <style>
+        /* Menambahkan font default yang lebih baik */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-400 flex justify-center items-center min-h-screen">
+
+    <div class="w-full max-w-md h-screen md:h-[90vh] md:max-h-[800px] bg-white shadow-xl flex flex-col overflow-hidden md:rounded-3xl">
+        
+        <header class="bg-[#0c2340] text-white flex justify-between items-center p-5 shadow-sm z-10">
+            <img src="\assets\images\Resmi_Logo_UMS_White_FullText.png" alt="logo" class="h-10">
+            <i class="fas fa-bars text-xl"></i>
+        </header>
+
+        <main class="flex-grow relative flex flex-col justify-center items-center text-center p-4">
+            
+            <div class="absolute inset-0 bg-cover bg-center" style="background-image: url('https://i.imgur.com/g0nZlSO.png');">
+                </div>
+            
+            <div class="absolute inset-0 bg-[#0c2340] opacity-70"></div>
+
+            <div class="relative z-10 text-white">
+                <h1 class="text-4xl font-extrabold leading-tight mb-2">
+                    JELAJAHI KAMPUS UMS
+                </h1>
+                <p class="text-lg mb-6">
+                    Temukan lokasi & gedung dengan Augmented Reality.
+                </p>
+                <a href="search.html">
+                    <button class="bg-[#FDB813] text-[#0c2340] font-bold py-3 px-8 rounded-full uppercase text-sm shadow-lg">
+                        MULAI JELAJAH
+                    </button>
+                </a>
+            </div>
+        </main>
+
+    </div>
+
+</body>
+</html>
