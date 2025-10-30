@@ -26,26 +26,24 @@
 </head>
 <body class="bg-gray-400 flex justify-center items-center min-h-screen">
 
-    <div class="w-full max-w-md h-screen md:h-[90vh] md:max-h-[800px] bg-white shadow-xl flex flex-col overflow-hidden md:rounded-3xl">
+    <div class="w-full max-w-md h-[100dvh] md:h-[90vh] md:max-h-[800px] bg-white shadow-xl relative overflow-hidden md:rounded-3xl">
         
-        <header class="bg-[#0c2340] text-white flex justify-between items-center p-5 shadow-sm z-20">
-            <span class="font-extrabold text-2xl">Peta Kampus</span>
-            <a href="search.html" class="text-xl">
-                <i class="fas fa-search"></i>
+        <div id="map" class="absolute inset-0 z-0"></div>
+
+        <header class="absolute top-0 left-0 right-0 z-10 text-white flex relative justify-center items-center p-5 bg-gradient-to-b from-black/60 to-transparent">
+            
+            <img src="assets/images/Resmi_Logo_UMS_White_ShortText.png" alt="logo" class="h-8 mt-4">
+            
+            <a href="search.html" class="text-xl absolute right-5">
+                <i class="mr-2 mt-4 fas fa-search"></i>
             </a>
         </header>
 
-        <main class="flex-grow relative z-10">
+        <button id="locate-btn" title="Locate My Position" class="absolute bottom-20 right-4 z-10 bg-white w-12 h-12 rounded-full shadow-lg flex justify-center items-center text-gray-700 text-xl">
+            <i class="fas fa-location-crosshairs"></i>
+        </button>
             
-            <div id="map" class="absolute inset-0"></div>
-
-            <button id="locate-btn" title="Locate My Position" class="absolute bottom-4 right-4 z-[1000] bg-white w-12 h-12 rounded-full shadow-lg flex justify-center items-center text-gray-700 text-xl">
-                <i class="fas fa-location-crosshairs"></i>
-            </button>
-            
-        </main>
-
-        <nav class="bg-[#0c2340] text-white flex justify-around py-3 shadow-inner z-20">
+        <nav class="absolute bottom-0 left-0 right-0 z-10 bg-[#0c2340] text-white flex justify-around py-3">
             
             <a href="index.html" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
                 <i class="fas fa-home text-xl mb-1"></i>

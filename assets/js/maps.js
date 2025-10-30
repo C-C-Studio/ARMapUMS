@@ -1,7 +1,14 @@
 // Inisialisasi Peta
 var latmap = -7.5567;
 var lonmap = 110.7711;
-var map = L.map("map").setView([latmap, lonmap], 17);
+// var map = L.map("map").setView([latmap, lonmap], 17);
+// SESUDAH
+var map = L.map("map", {
+    zoomControl: false,
+    // scrollWheelZoom: false,
+    // doubleClickZoom: false,
+    // touchZoom: false,
+}).setView([latmap, lonmap], 17);
 
 // Peta OpenStreetMap
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
