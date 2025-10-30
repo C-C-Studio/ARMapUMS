@@ -1,0 +1,23 @@
+[
+  {
+    "id": "gsw",
+    "nama": "Gedung Induk Siti Walidah",
+    "deskripsi": "Kantor Pusat UMS.",
+    "lat": -7.55810, 
+    "lon": 110.77175
+  },
+  {
+    "id": "gedung_j",
+    "nama": "Gedung J (Fakultas Komunikasi)",
+    "deskripsi": "Prodi Ilmu Komunikasi & Sistem Informasi.",
+    "lat": -7.55670,
+    "lon": 110.77115
+  },
+  {
+    "id": "masjid_sudjalmiyah",
+    "nama": "Masjid Sudalmiyah Rais",
+    "deskripsi": "Masjid Kampus UMS.",
+    "lat": -7.55615,
+    "lon": 110.77112
+  }
+]

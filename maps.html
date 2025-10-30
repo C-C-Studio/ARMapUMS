@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Peta Kampus UMS</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Memastikan peta tidak rusak */
+        .leaflet-container { 
+            height: 100%; 
+            width: 100%;
+        }
+    </style>
+</head>
+<body class="bg-gray-400 flex justify-center items-center min-h-screen">
+
+    <div class="w-full max-w-md h-screen md:h-[90vh] md:max-h-[800px] bg-white shadow-xl flex flex-col overflow-hidden md:rounded-3xl">
+        
+        <header class="bg-[#0c2340] text-white flex justify-between items-center p-5 shadow-sm z-20">
+            <span class="font-extrabold text-2xl">Peta Kampus</span>
+            <a href="search.html" class="text-xl">
+                <i class="fas fa-search"></i>
+            </a>
+        </header>
+
+        <main class="flex-grow relative z-10">
+            
+            <div id="map" class="absolute inset-0"></div>
+
+            <button id="locate-btn" class="absolute bottom-4 right-4 z-[1000] bg-white w-12 h-12 rounded-full shadow-lg flex justify-center items-center text-gray-700 text-xl">
+                <i class="fas fa-location-crosshairs"></i>
+            </button>
+            
+        </main>
+
+        <!-- <nav class="bg-[#0c2340] text-white flex justify-around py-3 shadow-inner z-20">
+            
+            <a href="index.html" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
+                <i class="fas fa-home text-xl mb-1"></i>
+                <span class="text-xs">Beranda</span>
+            </a>
+
+            <a href="peta.html" class="flex flex-col items-center justify-center text-white w-1/4">
+                <i class="fas fa-map-location-dot text-xl mb-1"></i>
+                <span class="text-xs font-bold">Peta</span>
+            </a>
+
+            <a href="#" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
+                <i class="fas fa-info-circle text-xl mb-1"></i>
+                <span class="text-xs">Info</span>
+            </a>
+
+            <a href="#" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
+                <i class="fas fa-cog text-xl mb-1"></i>
+                <span class="text-xs">Pengaturan</span>
+            </a>
+        </nav> -->
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script src="assets/js/maps.js"></script>
+        
+</body>
+</html>
