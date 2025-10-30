@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -38,7 +39,7 @@
             
             <div id="map" class="absolute inset-0"></div>
 
-            <button id="locate-btn" class="absolute bottom-4 right-4 z-[1000] bg-white w-12 h-12 rounded-full shadow-lg flex justify-center items-center text-gray-700 text-xl">
+            <button id="locate-btn" title="Locate My Position" class="absolute bottom-4 right-4 z-[1000] bg-white w-12 h-12 rounded-full shadow-lg flex justify-center items-center text-gray-700 text-xl">
                 <i class="fas fa-location-crosshairs"></i>
             </button>
             
@@ -69,6 +70,7 @@
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 
     <script src="assets/js/maps.js"></script>
         
