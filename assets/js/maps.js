@@ -214,3 +214,11 @@ map.on('moveend', function() {
 });
 
 // PERBAIKAN: '}' ekstra dari file maps.js kamu sudah dihapus
+
+// ===============================================
+// BARU: Perbaikan Bug Render Peta (Spasi Putih)
+// ===============================================
+// Memaksa peta untuk menghitung ulang ukurannya setelah layout stabil
+setTimeout(function() {
+    map.invalidateSize();
+}, 500); // Tunda 500ms untuk memastikan semua sudah dimuat
