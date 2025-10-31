@@ -130,3 +130,54 @@ function onLocationError(e) {
     alert("Tidak bisa mendapatkan lokasi Anda. Pastikan GPS dan izin lokasi aktif.");
 }
 map.on('locationerror', onLocationError);
+
+// ===============================================
+// Logika Auto-Hide Navbar saat Interaksi Peta
+// ===============================================
+
+// 1. Ambil elemen-elemen yang ingin kita animasikan
+const bottomNavbar = document.getElementById('bottom-navbar');
+// PERBAIKAN: Hapus baris di bawah ini karena 'locateButton' sudah dideklarasikan di atas
+// const locateButton = document.getElementById('locate-btn');
+
+// 2. Buat variabel untuk menampung timer
+let hideControlsTimer = null;
+
+// 3. Fungsi untuk menyembunyikan kontrol
+function hideMapControls() {
+    // Kita cek 'locateButton' di sini (variabel dari baris 113)
+    if (bottomNavbar && locateButton) {
+        // Hapus timer "show" yang mungkin sedang berjalan
+        clearTimeout(hideControlsTimer);
+        
+        // Tambahkan kelas Tailwind untuk menggeser elemen ke luar layar
+        bottomNavbar.classList.add('translate-y-full'); // Geser navbar ke bawah (sejauh tinggi navbar)
+    }
+}
+
+// 4. Fungsi untuk memunculkan kembali kontrol
+function showMapControls() {
+    if (bottomNavbar && locateButton) {
+        // Hapus kelas 'translate' untuk mengembalikan ke posisi semula
+        bottomNavbar.classList.remove('translate-y-full');
+    }
+}
+
+// 5. Tambahkan Event Listener ke Peta
+//    Saat pengguna MULAI menggerakkan peta (zoom/drag)
+map.on('movestart', function() {
+    hideMapControls();
+});
+
+// 6. Saat pengguna SELESAI menggerakkan peta
+map.on('moveend', function() {
+    // Hapus timer lama (jika ada, untuk mencegah tumpukan)
+    clearTimeout(hideControlsTimer);
+    
+    // Atur timer baru untuk memunculkan kontrol setelah 2 detik
+    hideControlsTimer = setTimeout(() => {
+        showMapControls();
+    }, 2000); // 2000 milidetik = 2 detik
+});
+
+// PERBAIKAN: Hapus '}' ekstra dari sini
