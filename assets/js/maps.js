@@ -19,6 +19,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 // BARU: Variabel untuk menyimpan rute & lokasi pengguna
 var routingControl = null;
 var userLocation = null; // Akan menyimpan L.latLng pengguna
+var isUserOnCampusFlag = false; // <-- MODIFIKASI DARI GEOFENCE
 
 // ===== MEMUAT MARKER (LOKASI GEDUNG) DARI JSON =====
 fetch('assets/data/location.json') //
@@ -67,6 +68,13 @@ fetch('assets/data/path.json') //
 // ===============================================
 function createRoute(destLat, destLon, destName) {
     
+    // <-- MODIFIKASI GEOFENCE DIMULAI -->
+    if (!isUserOnCampusFlag) {
+        alert("Fitur rute hanya dapat digunakan saat Anda berada di area kampus UMS.");
+        return; // Hentikan fungsi
+    }
+    // <-- MODIFIKASI GEOFENCE SELESAI -->
+
     // 1. Cek apakah kita tahu lokasi pengguna
     if (!userLocation) {
         alert("Harap tekan tombol 'Lokasi Saya' (kanan bawah) terlebih dahulu untuk menentukan titik awal rute.");
@@ -119,9 +127,34 @@ function onLocationFound(e) {
     // BARU: Simpan lokasi pengguna secara global
     userLocation = e.latlng; 
     
-    // Tambahkan marker & lingkaran baru
-    window.myLocationMarker = L.marker(userLocation).addTo(map).bindPopup("Lokasi Anda").openPopup();
-    window.myLocationCircle = L.circle(userLocation, radius).addTo(map);
+    // <-- MODIFIKASI GEOFENCE DIMULAI -->
+    // Cek apakah lokasi pengguna ada di dalam kampus (memakai fungsi dari geofence.js)
+    if (isUserOnCampus(userLocation)) {
+        // ---- JIKA DI DALAM KAMPUS ----
+        isUserOnCampusFlag = true;
+        
+        window.myLocationMarker = L.marker(userLocation).addTo(map)
+            .bindPopup("Lokasi Anda (Di Kampus)").openPopup();
+        
+        window.myLocationCircle = L.circle(userLocation, radius).addTo(map);
+        
+        console.log("Status: Pengguna terdeteksi DI DALAM area kampus.");
+
+    } else {
+        // ---- JIKA DI LUAR KAMPUS ----
+        isUserOnCampusFlag = false;
+        
+        window.myLocationMarker = L.marker(userLocation).addTo(map)
+            .bindPopup("Lokasi Anda (Di Luar Kampus)"); // Jangan langsung open popup
+            
+        window.myLocationCircle = L.circle(userLocation, radius).addTo(map);
+        
+        console.log("Status: Pengguna terdeteksi DI LUAR area kampus.");
+        
+        // Beri peringatan
+        alert("Anda terdeteksi berada di luar area kampus. Fitur rute tidak akan tersedia.");
+    }
+    // <-- MODIFIKASI GEOFENCE SELESAI -->
 }
 map.on('locationfound', onLocationFound);
 
@@ -133,12 +166,12 @@ map.on('locationerror', onLocationError);
 
 // ===============================================
 // Logika Auto-Hide Navbar saat Interaksi Peta
+// (Fitur baru dari 'maps.js' kamu)
 // ===============================================
 
 // 1. Ambil elemen-elemen yang ingin kita animasikan
 const bottomNavbar = document.getElementById('bottom-navbar');
-// PERBAIKAN: Hapus baris di bawah ini karena 'locateButton' sudah dideklarasikan di atas
-// const locateButton = document.getElementById('locate-btn');
+// 'locateButton' sudah dideklarasikan di atas (baris 113)
 
 // 2. Buat variabel untuk menampung timer
 let hideControlsTimer = null;
@@ -180,4 +213,4 @@ map.on('moveend', function() {
     }, 2000); // 2000 milidetik = 2 detik
 });
 
-// PERBAIKAN: Hapus '}' ekstra dari sini
+// PERBAIKAN: '}' ekstra dari file maps.js kamu sudah dihapus
