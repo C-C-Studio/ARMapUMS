@@ -22,6 +22,10 @@
             height: 100%;
             width: 100%;
         }
+        /* Style kustom untuk placeholder input */
+        ::placeholder {
+            color: #9ca3af; /* text-gray-400 */
+        }
     </style>
 </head>
 <body class="bg-gray-400">
@@ -34,12 +38,59 @@
             
             <img src="assets/images/Resmi_Logo_UMS_White_ShortText.png" alt="logo" class="h-8 mt-2">
             
-            <a href="search.html" class="text-xl absolute right-5" title="Search locations">
+            <button id="open-search-btn" class="text-xl absolute right-5" title="Search locations">
                 <i class="mr-2 mt-2 fas fa-search"></i>
-            </a>
+            </button>
         </header>
+        
+        <!-- Search panel -->
+        <div id="search-panel" class="absolute inset-0 z-20 bg-[#0c2340] flex flex-col transition-transform duration-300 ease-in-out -translate-y-full">
+            
+            <main class="flex-grow p-5 overflow-y-auto">
+            
+                <div class="flex items-center gap-4 mb-6">
+                    <button id="close-search-btn" class="text-white text-xl" title="Back to Map">
+                        <i class="fas fa-arrow-left" aria-hidden="true"></i>
+                        <span class="sr-only">Back to Map</span>
+                    </button>
+                    
+                    <div class="relative flex-grow">
+                        <input 
+                            type="text" 
+                            id="search-input"
+                            placeholder="Cari nama gedung atau lokasi..."
+                            class="w-full bg-white/90 text-gray-900 py-3 pl-5 pr-12 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        >
+                        <i class="fas fa-search text-gray-500 absolute right-4 top-1/2 -translate-y-1/2"></i>
+                    </div>
+                </div>
+                
+                <div class="mt-8">
+                    <h2 class="text-gray-400 text-xs font-semibold uppercase mb-3">
+                        Frequently Visited
+                    </h2>
+                    <div id="frequent-list" class="space-y-3">
+                    </div>
+                </div>
+                
+                <div class="mt-8">
+                    <h2 class="text-gray-400 text-xs font-semibold uppercase mb-3">
+                        All Locations
+                    </h2>
+                    <div id="all-locations-list" class="space-y-3">
+                    </div>
+                </div>
 
-        <button id="locate-btn" title="Locate My Position" class="absolute bottom-20 right-4 z-10 bg-white w-12 h-12 rounded-full shadow-lg flex justify-center items-center text-gray-700 text-xl">
+            </main>
+        </div>
+
+        <!-- Button to enter AR mode -->
+        <a href="ar-maps.html" id="ar-btn" title="Enter AR Mode" class="absolute mb-12 bottom-36 right-6 z-10 bg-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-gray-700 text-xl">
+            <i class="fas fa-vr-cardboard"></i>
+        </a>
+
+        <!-- Button to locate user position -->
+        <button id="locate-btn" title="Locate My Position" class="absolute mb-12 bottom-20 right-6 z-10 bg-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-gray-700 text-xl">
             <i class="fas fa-location-crosshairs"></i>
         </button>
             
