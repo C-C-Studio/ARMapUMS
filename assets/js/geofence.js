@@ -10,7 +10,7 @@
 // Set 'false' saat Anda coding di rumah
 // Set 'true' saat aplikasi di-deploy/testing di kampus
 //
-const IS_CAMPUS_CHECK_ENABLED = false;
+const IS_CAMPUS_CHECK_ENABLED = true;
 
 //
 // --- KONFIGURASI AREA KAMPUS ---
