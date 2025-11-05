@@ -25,6 +25,7 @@ let isProgrammaticTrigger = false;
 // BARU: Variabel Status Navigasi & Timer
 // ===============================================
 let isNavigating = false; // Status apakah kita dalam mode navigasi
+let wasNavigating = false; // BARU: Flag untuk melacak jika navigasi diinterupsi
 let snapBackTimer = null; // Timer untuk 'snap back'
 
 
@@ -172,6 +173,10 @@ map.on('load', () => {
 // Fungsi untuk membuat rute
 // ===============================================
 async function createRoute(destLat, destLon, destName) {
+    clearTimeout(snapBackTimer); // Hentikan timer 'snap back'
+    snapBackTimer = null;
+    isNavigating = false;     // Kita tidak sedang bernavigasi
+    wasNavigating = false;  // Kita juga tidak "baru saja" menginterupsi
     if (!isUserOnCampusFlag) {
         alert("Fitur rute hanya dapat digunakan saat Anda berada di area kampus UMS.");
         return;
@@ -419,6 +424,7 @@ searchInput.addEventListener('keyup', function(e) {
 function startNavigationMode() {
     // 1. Set status & Sembunyikan/Tampilkan tombol
     isNavigating = true;
+    wasNavigating = false; // BARU: Reset flag 'wasNavigating'
     startNavBtn.style.display = 'none';
     cancelNavBtn.style.display = 'flex';
     
@@ -458,6 +464,7 @@ function startNavigationMode() {
 // ===============================================
 function cancelNavigationMode() {
     isNavigating = false;
+    wasNavigating = false; // BARU: Reset flag 'wasNavigating'
     clearTimeout(snapBackTimer);
     snapBackTimer = null;
 
@@ -513,6 +520,7 @@ function interruptNavigation() {
     if (isNavigating) {
         console.log('User interrupted navigation.');
         isNavigating = false;
+        wasNavigating = true; // BARU: Tandai bahwa kita BARU SAJA menginterupsi
         
         // Matikan mode 'follow & heading' (state 3) kembali ke 'follow' (state 2)
         if (geolocate._controlButton && geolocate._watchState === 3) {
@@ -529,8 +537,8 @@ function interruptNavigation() {
 function startSnapBackTimer() {
     clearTimeout(snapBackTimer);
     
-    // Hanya mulai timer jika ada rute di peta
-    if (map.getSource('route')) {
+    // DIUBAH: Cek 'wasNavigating', BUKAN 'map.getSource('route')'
+    if (wasNavigating && map.getSource('route')) {
         console.log('User stopped. Starting 4-second snap-back timer...');
         snapBackTimer = setTimeout(() => {
             // Setelah 4 detik, panggil fungsi 'Mulai Navigasi' lagi
