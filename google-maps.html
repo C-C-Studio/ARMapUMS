@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8">
+    <title>Peta Kampus UMS (Google Maps)</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        ::placeholder {
+            color: #9ca3af;
+        }
+        /* Memastikan InfoWindow kustom tidak memiliki padding/background bawaan */
+        .gm-style .gm-style-iw-c {
+            padding: 0;
+            background: none;
+            box-shadow: none;
+        }
+        .gm-style .gm-style-iw-t::after {
+            background: none;
+        }
+
+        /* * BARU: Style untuk Indikator Lokasi Pengguna 
+         * (Meniru MapLibre GeolocateControl)
+        */
+        .user-location-marker {
+            position: relative;
+            width: 22px;
+            height: 22px;
+            transform: translate(-50%, -50%);
+            pointer-events: none; /* Penting agar tidak menghalangi klik peta */
+        }
+        .user-location-dot {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background-color: #1a73e8; /* Biru Google/Mapbox */
+            border: 2px solid white;
+            box-shadow: 0 0 5px rgba(0,0,0,0.4);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .user-location-heading {
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 10px solid #1a73e8;
+            position: absolute;
+            top: -4px; /* Posisikan di atas dot */
+            left: 50%;
+            transform: translateX(-50%) rotate(0deg); /* Awalnya 0 derajat */
+            transform-origin: bottom center;
+            transition: transform 0.2s ease-out; /* Animasi rotasi */
+        }
+    </style>
+
+    <script src="assets/js/config.js"></script>
+    
+    <script>(g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await (a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t[0].toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.${c}apis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})
+        ({key: GOOGLE_MAPS_API_KEY, v: "weekly"});</script>
+  </head>
+  
+  <body class="bg-gray-400">
+
+    <div class="w-full max-w-md mx-auto h-[100dvh] md:h-[90vh] md:max-h-[800px] bg-white shadow-xl relative overflow-hidden md:rounded-3xl">
+        
+        <gmp-map 
+            id="map" 
+            class="absolute top-0 left-0 right-0 bottom-0 z-0"
+            center="-7.5567,110.7711" 
+            zoom="17" 
+            map-id="8ed97759f9e71cfb265887fd">
+        </gmp-map>
+        <header class="absolute top-0 left-0 right-0 z-10 text-white flex justify-center items-center p-5 bg-gradient-to-b from-black/60 to-transparent">
+            <img src="assets/images/Resmi_Logo_UMS_White_ShortText.png" alt="logo" class="h-8 mt-2">
+            <button id="open-search-btn" class="text-xl absolute right-5" title="Search locations">
+                <i class="mr-2 mt-2 fas fa-search"></i>
+            </button>
+        </header>
+        
+        <div id="search-panel" class="absolute inset-0 z-20 bg-[#0c2340] flex flex-col transition-transform duration-300 ease-in-out -translate-y-full">
+            <main class="flex-grow p-5 overflow-y-auto">
+                <div class="flex items-center gap-4 mb-6">
+                    <button id="close-search-btn" class="text-white text-xl" title="Back to Map">
+                        <i class="fas fa-arrow-left" aria-hidden="true"></i>
+                    </button>
+                    <div class="relative flex-grow">
+                        <input type="text" id="search-input" placeholder="Cari nama gedung atau lokasi..." class="w-full bg-white/90 text-gray-900 py-3 pl-5 pr-12 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                        <i class="fas fa-search text-gray-500 absolute right-4 top-1/2 -translate-y-1/2"></i>
+                    </div>
+                </div>
+                <div class="mt-8">
+                    <h2 class="text-gray-400 text-xs font-semibold uppercase mb-3">Frequently Visited</h2>
+                    <div id="frequent-list" class="space-y-3"></div>
+                </div>
+                <div class="mt-8">
+                    <h2 class="text-gray-400 text-xs font-semibold uppercase mb-3">All Locations</h2>
+                    <div id="all-locations-list" class="space-y-3"></div>
+                </div>
+            </main>
+        </div>
+
+        <button id="start-nav-btn" title="Start Navigation" class="absolute mb-12 bottom-52 right-6 z-10 bg-blue-500 text-white w-auto h-14 px-5 rounded-full shadow-lg flex justify-center items-center font-semibold" style="display: none;">
+            <i class="fas fa-location-arrow mr-2"></i>
+            MULAI
+        </button>
+
+        <button id="cancel-nav-btn" title="Cancel Navigation" class="absolute mb-12 bottom-52 right-6 z-10 bg-red-500 text-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-xl" style="display: none;">
+            <i class="fas fa-times"></i>
+        </button>
+
+        <a href="ar-maps-test.html" id="ar-btn" title="Enter AR Mode" class="absolute mb-12 bottom-36 right-6 z-10 bg-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-gray-700 text-xl">
+            <i class="fas fa-vr-cardboard"></i>
+        </a>
+
+        <button id="locate-btn" title="Locate My Position" class="absolute mb-12 bottom-20 right-6 z-10 bg-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-gray-700 text-xl">
+            <i class="fas fa-location-crosshairs"></i>
+        </button>
+
+        <nav id="bottom-navbar" class="absolute bottom-0 left-0 right-0 z-10 bg-[#0c2340] text-white flex justify-around py-3 h-16 transition-transform duration-300 ease-in-out">
+            <a href="index.html" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
+                <i class="fas fa-home text-xl mb-1"></i>
+                <span class="text-xs">Beranda</span>
+            </a>
+
+            <a href="maps.html" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
+                <i class="fas fa-map-location-dot text-xl mb-1"></i>
+                <span class="text-xs">Leaflet</span>
+            </a>
+
+            <a href="maplibre.html" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
+                <i class="fas fa-map-location-dot text-xl mb-1"></i>
+                <span class="text-xs">Maplibre</span>
+            </a>
+
+            <a href="google-maps.html" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
+                <i class="fas fa-map-location-dot text-xl mb-1"></i>
+                <span class="text-xs font-bold">Google</span>
+            </a>
+
+            <a href="#" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
+                <i class="fas fa-cog text-xl mb-1"></i>
+                <span class="text-xs">Pengaturan</span>
+            </a>
+        </nav>
+    </div>
+    
+    <script type="module" src="assets/js/google-maps.js"></script>
+  </body>
+</html>
