@@ -29,18 +29,18 @@
         /* * BARU: Style untuk Indikator Lokasi Pengguna 
          * (Meniru MapLibre GeolocateControl)
         */
-        .user-location-marker {
+        /* .user-location-marker {
             position: relative;
             width: 22px;
             height: 22px;
             transform: translate(-50%, -50%);
-            pointer-events: none; /* Penting agar tidak menghalangi klik peta */
+            pointer-events: none;
         }
         .user-location-dot {
             width: 18px;
             height: 18px;
             border-radius: 50%;
-            background-color: #1a73e8; /* Biru Google/Mapbox */
+            background-color: #1a73e8;
             border: 2px solid white;
             box-shadow: 0 0 5px rgba(0,0,0,0.4);
             position: absolute;
@@ -55,11 +55,59 @@
             border-right: 6px solid transparent;
             border-bottom: 10px solid #1a73e8;
             position: absolute;
-            top: -4px; /* Posisikan di atas dot */
+            top: -4px;
             left: 50%;
-            transform: translateX(-50%) rotate(0deg); /* Awalnya 0 derajat */
+            transform: translateX(-50%) rotate(0deg);
             transform-origin: bottom center;
-            transition: transform 0.2s ease-out; /* Animasi rotasi */
+            transition: transform 0.2s ease-out;
+        } */
+        /* * BARU: Style untuk Indikator Lokasi Pengguna 
+         * (Meniru Google Maps dengan Kompas)
+        */
+        .user-location-marker {
+            position: relative;
+            width: 22px;
+            height: 22px;
+            transform: translate(-50%, -50%);
+            pointer-events: none; /* Penting agar tidak menghalangi klik peta */
+        }
+
+        .user-location-dot {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background-color: #1a73e8; /* Biru Google */
+            border: 2px solid white;
+            box-shadow: 0 0 5px rgba(0,0,0,0.4);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2; /* Pastikan dot di atas beam */
+        }
+
+        .user-location-heading {
+            width: 60px; /* Ukuran beam (kerucut) */
+            height: 60px;
+            position: absolute;
+            top: 50%; /* Pusatkan di dot */
+            left: 50%;
+            /* Transform ini akan di-update oleh JS untuk rotasi */
+            transform: translate(-50%, -50%) rotate(0deg); 
+            transform-origin: center center; /* Putar dari tengah */
+            
+            /* Visual kerucut/beam menggunakan conic-gradient */
+            background: conic-gradient(
+                /* 'from 210deg' memposisikan kerucut (120deg) agar mengarah ke 'atas' */
+                from 210deg at 50% 50%, 
+                #1a73e84D 0deg,        /* Mulai kerucut */
+                #1a73e84D 120deg,       /* Lebar kerucut 120 derajat */
+                transparent 120.1deg,   /* Sisa lingkaran transparan */
+                transparent 360deg
+            );
+            border-radius: 50%; /* Jadikan lingkaran */
+            z-index: 1; /* Di belakang dot */
+            transition: transform 0.2s ease-out; /* Animasi rotasi halus */
         }
     </style>
 
@@ -80,6 +128,22 @@
             zoom="17" 
             map-id="8ed97759f9e71cfb265887fd">
         </gmp-map>
+        <div id="compass-indicator" 
+             class="absolute top-24 left-5 z-10 w-20 h-20 rounded-full bg-white/80 backdrop-blur-sm shadow-lg flex justify-center items-center text-gray-800 font-bold text-sm" 
+             style="display: none;"> <span class="absolute top-1.5">N</span>
+            <span class="absolute right-2.5">E</span>
+            <span class="absolute bottom-1.5">S</span>
+            <span class="absolute left-2.5">W</span>
+            
+            <div id="compass-needle" 
+                 class="absolute w-full h-full" 
+                 style="transform: rotate(0deg); transition: transform 0.2s ease-out;">
+                 
+                 <i class="fas fa-long-arrow-alt-up text-red-600 text-3xl absolute top-1 left-1/2 -translate-x-1/2"></i>
+                 
+                 <i class="fas fa-long-arrow-alt-down text-gray-500 text-xl absolute bottom-1 left-1/2 -translate-x-1/2"></i>
+            </div>
+        </div>
         <header class="absolute top-0 left-0 right-0 z-10 text-white flex justify-center items-center p-5 bg-gradient-to-b from-black/60 to-transparent">
             <img src="assets/images/Resmi_Logo_UMS_White_ShortText.png" alt="logo" class="h-8 mt-2">
             <button id="open-search-btn" class="text-xl absolute right-5" title="Search locations">
@@ -142,7 +206,7 @@
                 <span class="text-xs">Maplibre</span>
             </a>
 
-            <a href="google-maps.html" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
+            <a href="google-maps.html" class="flex flex-col items-center justify-center text-white w-1/4">
                 <i class="fas fa-map-location-dot text-xl mb-1"></i>
                 <span class="text-xs font-bold">Google</span>
             </a>

@@ -22,7 +22,6 @@ async function initMap() {
     // Inisialisasi modul geofence
     await initGeofence();
     
-    // Dipindahkan ke atas agar bisa dipakai untuk listener 'wheel'
     const mapElement = document.querySelector('gmp-map'); 
     const map = mapElement.innerMap;
     
@@ -44,6 +43,12 @@ async function initMap() {
     let userPosition = null;
     let watchId = null; 
     
+    // --- PERUBAHAN: Variabel untuk menyimpan data mentah kompas ---
+    let lastCompassAlpha = 0; 
+    let correctedHeading = 0;
+
+    let correctedNeedleHeading = 0;
+
     let isNavigating = false;
     let wasNavigating = false;
     let snapBackTimer = null;
@@ -58,6 +63,9 @@ async function initMap() {
     const arButton = document.getElementById('ar-btn');
     const startNavButton = document.getElementById('start-nav-btn');
     const cancelNavButton = document.getElementById('cancel-nav-btn');
+
+    const compassIndicator = document.getElementById('compass-indicator');
+    const compassNeedle = document.getElementById('compass-needle');
 
 
     // --- 4. EVENT LISTENERS ---
@@ -94,26 +102,97 @@ async function initMap() {
         cancelNavigationMode(); 
     });
 
-    // Listener untuk geser (pan) DAN cubit (pinch-zoom)
     map.addListener('dragstart', interruptNavigation); 
-
-    // ======================================================
-    // PERBAIKAN: Hapus listener 'zoom_changed' yang berisik
-    // map.addListener('zoom_changed', interruptNavigation);
-    
-    // PERBAIKAN: Tambahkan listener 'wheel' untuk scroll-zoom
     mapElement.addEventListener('wheel', interruptNavigation, { passive: true });
-    // ======================================================
     
-    // Listener 'idle' (saat peta diam) untuk memulai snap-back
     map.addListener('idle', () => {
         if (wasNavigating) {
             startSnapBackTimer();
         }
     });
 
+    // --- PERUBAHAN: Listener untuk Orientasi Device (Kompas) ---
+    function handleOrientation(event) {
+        // event.webkitCompassHeading untuk iOS (Safari)
+        // event.alpha untuk standar (Android/Chrome)
+        const alpha = event.webkitCompassHeading || event.alpha;
+        if (alpha == null) return;
+        
+        lastCompassAlpha = alpha; // Simpan data mentah
+        
+        // Tampilkan UI Kompas jika ini panggilan pertama
+        // Kita tidak lagi memutar jarum kompas di sini.
+        if (compassIndicator && compassIndicator.style.display === 'none') {
+            compassIndicator.style.display = 'flex';
+        }
+        
+        updateCompassRotation(); // Panggil fungsi update rotasi kerucut
+    }
+    
+    if (window.DeviceOrientationEvent) {
+        window.addEventListener('deviceorientation', handleOrientation, true);
+    } else {
+        console.warn("DeviceOrientationEvent (kompas) tidak didukung di browser ini.");
+    }
+
+    // --- BARU: Listener saat PETA DIPUTAR oleh user ---
+    // Ini akan memicu perhitungan ulang rotasi kompas
+    map.addListener('heading_changed', updateCompassRotation);
+
 
     // --- 5. FUNGSI LOGIKA INTI ---
+
+    // --- BARU: Fungsi terpisah untuk menghitung & menerapkan rotasi ---
+    // --- GANTI FUNGSI INI ---
+    function updateCompassRotation() {
+        if (!userMarker) return; // Jangan lakukan apa-apa jika marker belum ada
+
+        const mapHeading = map.getHeading() || 0; // Dapatkan putaran peta saat ini
+        
+        // --- 1. LOGIKA UNTUK KERUCUT (BEAM) ---
+        // Ini adalah target rotasi untuk kerucut di dot biru
+        const targetConeHeading = -lastCompassAlpha - mapHeading;
+        
+        let coneDelta = targetConeHeading - correctedHeading;
+
+        // Atasi "wrap-around" untuk kerucut
+        if (coneDelta > 180) {
+            coneDelta -= 360; 
+        } else if (coneDelta < -180) {
+            coneDelta += 360; 
+        }
+        
+        correctedHeading += coneDelta;
+        
+        // Terapkan rotasi ke kerucut
+        const headingEl = userMarker.content.querySelector('.user-location-heading');
+        if (headingEl) {
+            headingEl.style.transform = `translate(-50%, -50%) rotate(${correctedHeading}deg)`;
+        }
+
+        // --- 2. LOGIKA UNTUK JARUM KOMPAS (NEEDLE UI) ---
+        // Target jarum adalah kebalikan dari target kerucut.
+        // Jika kerucut menunjuk ke -90 (Timur di peta), jarum harus menunjuk ke 90 (huruf E).
+        const targetNeedleHeading = -targetConeHeading;
+        
+        let needleDelta = targetNeedleHeading - correctedNeedleHeading;
+        
+        // Atasi "wrap-around" untuk jarum kompas
+        if (needleDelta > 180) {
+            needleDelta -= 360;
+        } else if (needleDelta < -180) {
+            needleDelta += 360;
+        }
+
+        correctedNeedleHeading += needleDelta;
+
+        // Terapkan rotasi ke jarum kompas UI
+        if (compassNeedle) {
+            compassNeedle.style.transform = `rotate(${correctedNeedleHeading}deg)`;
+        }
+    }
+    // --- AKHIR PENGGANTIAN ---
+
 
     function startWatchingLocation() {
         if (watchId) return; 
@@ -130,7 +209,7 @@ async function initMap() {
     }
 
     function updateUserLocation(position) {
-        const { latitude, longitude, heading } = position.coords;
+        const { latitude, longitude } = position.coords; 
         userPosition = new LatLng(latitude, longitude);
 
         if (!isUserOnCampus(userPosition)) {
@@ -148,10 +227,9 @@ async function initMap() {
         
         userMarker.position = userPosition;
 
-        const headingEl = userMarker.content.querySelector('.user-location-heading');
-        if (headingEl && heading != null) {
-            headingEl.style.transform = `translateX(-50%) rotate(${heading}deg)`;
-        }
+        // --- PERUBAHAN: Panggil fungsi update kompas ---
+        // Ini akan mengatur rotasi awal saat marker pertama kali dibuat
+        updateCompassRotation(); 
 
         if (isNavigating) {
             isProgrammaticMove = true;
@@ -295,8 +373,8 @@ async function initMap() {
         const dotEl = document.createElement('div');
         dotEl.className = 'user-location-dot';
         
-        markerEl.appendChild(headingEl);
-        markerEl.appendChild(dotEl);
+        markerEl.appendChild(headingEl); // Beam/kerucut
+        markerEl.appendChild(dotEl);     // Titik biru (di atas)
         
         return markerEl;
     }
