@@ -43,11 +43,14 @@ async function initMap() {
     let userPosition = null;
     let watchId = null; 
     
-    // --- PERUBAHAN: Variabel untuk menyimpan data mentah kompas ---
+    // Variabel untuk menyimpan data mentah kompas
     let lastCompassAlpha = 0; 
     let correctedHeading = 0;
-
     let correctedNeedleHeading = 0;
+
+    // Variabel untuk smoothing kompas
+    let smoothedAlpha = null; // Ini akan menyimpan nilai kompas yang stabil
+    const smoothingFactor = 0.1; // (0.05 = sangat mulus, 0.5 = cepat)
 
     let isNavigating = false;
     let wasNavigating = false;
@@ -66,7 +69,7 @@ async function initMap() {
 
     const compassIndicator = document.getElementById('compass-indicator');
     const compassNeedle = document.getElementById('compass-needle');
-
+    const degreeIndicator = document.getElementById('degree-indicator');
 
     // --- 4. EVENT LISTENERS ---
     
@@ -102,6 +105,7 @@ async function initMap() {
         cancelNavigationMode(); 
     });
 
+
     map.addListener('dragstart', interruptNavigation); 
     mapElement.addEventListener('wheel', interruptNavigation, { passive: true });
     
@@ -111,50 +115,93 @@ async function initMap() {
         }
     });
 
-    // --- PERUBAHAN: Listener untuk Orientasi Device (Kompas) ---
+    // --- PERUBAHAN BESAR: Listener Orientasi + Smoothing ---
     function handleOrientation(event) {
         // event.webkitCompassHeading untuk iOS (Safari)
         // event.alpha untuk standar (Android/Chrome)
-        const alpha = event.webkitCompassHeading || event.alpha;
+        let alpha = event.webkitCompassHeading || event.alpha;
         if (alpha == null) return;
+        const correctedAlpha = (360 - alpha) % 360;
         
-        lastCompassAlpha = alpha; // Simpan data mentah
+        if (smoothedAlpha === null) {
+            smoothedAlpha = correctedAlpha;
+        } else {
+            let diff = correctedAlpha - smoothedAlpha
+            // Atasi "Gimbal Lock" (lompatan dari 359 ke 0)
+            if (diff > 180) { diff -= 360; }
+            if (diff < -180) { diff += 360; }
+            
+            smoothedAlpha += diff * smoothingFactor;
+            
+            // Normalisasi 0-360
+            smoothedAlpha = smoothedAlpha % 360;
+            if (smoothedAlpha < 0) { smoothedAlpha += 360; }
+        }
+        
+        // 2. Gunakan nilai yang sudah di-smooth untuk SEMUANYA
+        lastCompassAlpha = smoothedAlpha; 
+        
+        // 3. Panggil fungsi update UI derajat dengan nilai yang di-smooth
+        updateRealCompassDegree(smoothedAlpha);
         
         // Tampilkan UI Kompas jika ini panggilan pertama
-        // Kita tidak lagi memutar jarum kompas di sini.
         if (compassIndicator && compassIndicator.style.display === 'none') {
             compassIndicator.style.display = 'flex';
         }
         
+        // Tampilkan UI Derajat jika ini panggilan pertama
+        if (degreeIndicator && degreeIndicator.style.display === 'none') {
+            degreeIndicator.style.display = 'flex';
+        }
+
         updateCompassRotation(); // Panggil fungsi update rotasi kerucut
     }
     
     if (window.DeviceOrientationEvent) {
-        window.addEventListener('deviceorientation', handleOrientation, true);
+        // Coba gunakan 'absolute' untuk data yang lebih konsisten (True North)
+        // Ini adalah event yang digunakan di ar-maps-test.html
+        try {
+            window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+            console.log("Menggunakan 'deviceorientationabsolute'.");
+        } catch (e) {
+            // Fallback jika 'absolute' tidak didukung (jarang terjadi)
+            window.addEventListener('deviceorientation', handleOrientation, true);
+            console.warn("Fallback ke 'deviceorientation' (mungkin tidak akurat).");
+        }
     } else {
         console.warn("DeviceOrientationEvent (kompas) tidak didukung di browser ini.");
     }
 
-    // --- BARU: Listener saat PETA DIPUTAR oleh user ---
-    // Ini akan memicu perhitungan ulang rotasi kompas
+    // Listener saat PETA DIPUTAR oleh user
     map.addListener('heading_changed', updateCompassRotation);
 
 
     // --- 5. FUNGSI LOGIKA INTI ---
 
-    // --- BARU: Fungsi terpisah untuk menghitung & menerapkan rotasi ---
-    function updateCompassRotation() {
-        if (!userMarker) return; // Jangan lakukan apa-apa jika marker belum ada
+    /**
+     * Fungsi terpisah untuk memperbarui UI yang menampilkan 
+     * derajat kompas (0-359) secara nyata.
+     * @param {number} degrees - Nilai kompas mentah (alpha) dari 0-359.
+     */
+    function updateRealCompassDegree(degrees) {
+        if (degreeIndicator) {
+            // Bulatkan ke integer terdekat
+            const roundedDegrees = Math.round(degrees);
+            // Update teks di dalam elemen
+            degreeIndicator.textContent = `${roundedDegrees}°`;
+        }
+    }
 
-        const mapHeading = map.getHeading() || 0; // Dapatkan putaran peta saat ini
+    // --- FUNGSI UNTUK MENGHITUNG & MENERAPKAN ROTASI ---
+    function updateCompassRotation() {
+        if (!userMarker) return;
+
+        const mapHeading = map.getHeading() || 0; 
         
-        // --- 1. LOGIKA UNTUK KERUCUT (BEAM) ---
-        // menggunakan -lastCompassAlpha untuk mengoreksi arah kerucut agar sesuai arah dunia nyata
-        const targetConeHeading = -lastCompassAlpha - mapHeading;
+        const targetConeHeading = lastCompassAlpha - mapHeading;
         
         let coneDelta = targetConeHeading - correctedHeading;
 
-        // Atasi "wrap-around" untuk kerucut
         if (coneDelta > 180) {
             coneDelta -= 360; 
         } else if (coneDelta < -180) {
@@ -169,13 +216,9 @@ async function initMap() {
         }
 
         // --- 2. LOGIKA UNTUK JARUM KOMPAS (NEEDLE UI) ---
-        // PERBAIKAN: Arah jarum adalah (Rotasi Kerucut + Rotasi Peta)
-        // Ini mengubah arah kerucut di layar kembali ke arah dunia nyata.
         const targetNeedleHeading = correctedHeading + mapHeading;
-        
         let needleDelta = targetNeedleHeading - correctedNeedleHeading;
         
-        // Atasi "wrap-around" untuk jarum kompas
         if (needleDelta > 180) {
             needleDelta -= 360;
         } else if (needleDelta < -180) {
@@ -188,8 +231,6 @@ async function initMap() {
             compassNeedle.style.transform = `rotate(${correctedNeedleHeading}deg)`;
         }
     }
-    // --- AKHIR PENGGANTIAN ---
-
 
     function startWatchingLocation() {
         if (watchId) return; 
@@ -224,8 +265,7 @@ async function initMap() {
         
         userMarker.position = userPosition;
 
-        // --- PERUBAHAN: Panggil fungsi update kompas ---
-        // Ini akan mengatur rotasi awal saat marker pertama kali dibuat
+        // Panggil fungsi update kompas
         updateCompassRotation(); 
 
         if (isNavigating) {
