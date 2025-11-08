@@ -96,15 +96,17 @@
             transform: translate(-50%, -50%) rotate(0deg); 
             transform-origin: center center; /* Putar dari tengah */
             
-            /* Visual kerucut/beam menggunakan conic-gradient */
+            /* --- KODE BARU DI BAWAH INI --- */
             background: conic-gradient(
-                /* 'from 210deg' memposisikan kerucut (120deg) agar mengarah ke 'atas' */
-                from 210deg at 50% 50%, 
+                /* PERBAIKAN: 'from 300deg' memposisikan kerucut (120deg) agar mengarah ke 'atas' (0deg) */
+                from 300deg at 50% 50%, 
                 #1a73e84D 0deg,        /* Mulai kerucut */
                 #1a73e84D 120deg,       /* Lebar kerucut 120 derajat */
                 transparent 120.1deg,   /* Sisa lingkaran transparan */
                 transparent 360deg
             );
+            /* --- KODE BARU SELESAI --- */
+
             border-radius: 50%; /* Jadikan lingkaran */
             z-index: 1; /* Di belakang dot */
             transition: transform 0.2s ease-out; /* Animasi rotasi halus */

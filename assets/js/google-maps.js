@@ -143,14 +143,13 @@ async function initMap() {
     // --- 5. FUNGSI LOGIKA INTI ---
 
     // --- BARU: Fungsi terpisah untuk menghitung & menerapkan rotasi ---
-    // --- GANTI FUNGSI INI ---
     function updateCompassRotation() {
         if (!userMarker) return; // Jangan lakukan apa-apa jika marker belum ada
 
         const mapHeading = map.getHeading() || 0; // Dapatkan putaran peta saat ini
         
         // --- 1. LOGIKA UNTUK KERUCUT (BEAM) ---
-        // Ini adalah target rotasi untuk kerucut di dot biru
+        // menggunakan -lastCompassAlpha untuk mengoreksi arah kerucut agar sesuai arah dunia nyata
         const targetConeHeading = -lastCompassAlpha - mapHeading;
         
         let coneDelta = targetConeHeading - correctedHeading;
@@ -164,16 +163,15 @@ async function initMap() {
         
         correctedHeading += coneDelta;
         
-        // Terapkan rotasi ke kerucut
         const headingEl = userMarker.content.querySelector('.user-location-heading');
         if (headingEl) {
             headingEl.style.transform = `translate(-50%, -50%) rotate(${correctedHeading}deg)`;
         }
 
         // --- 2. LOGIKA UNTUK JARUM KOMPAS (NEEDLE UI) ---
-        // Target jarum adalah kebalikan dari target kerucut.
-        // Jika kerucut menunjuk ke -90 (Timur di peta), jarum harus menunjuk ke 90 (huruf E).
-        const targetNeedleHeading = -targetConeHeading;
+        // PERBAIKAN: Arah jarum adalah (Rotasi Kerucut + Rotasi Peta)
+        // Ini mengubah arah kerucut di layar kembali ke arah dunia nyata.
+        const targetNeedleHeading = correctedHeading + mapHeading;
         
         let needleDelta = targetNeedleHeading - correctedNeedleHeading;
         
@@ -186,7 +184,6 @@ async function initMap() {
 
         correctedNeedleHeading += needleDelta;
 
-        // Terapkan rotasi ke jarum kompas UI
         if (compassNeedle) {
             compassNeedle.style.transform = `rotate(${correctedNeedleHeading}deg)`;
         }
