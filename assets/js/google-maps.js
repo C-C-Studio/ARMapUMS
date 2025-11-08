@@ -49,8 +49,8 @@ async function initMap() {
     let correctedNeedleHeading = 0;
 
     // Variabel untuk smoothing kompas
-    let smoothedAlpha = null; // Ini akan menyimpan nilai kompas yang stabil
-    const smoothingFactor = 0.1; // (0.05 = sangat mulus, 0.5 = cepat)
+    let smoothedAlpha = null; 
+    const smoothingFactor = 0.1; 
 
     let isNavigating = false;
     let wasNavigating = false;
@@ -62,6 +62,9 @@ async function initMap() {
     const defaultCenter = new LatLng(-7.5567, 110.7711);
     const defaultZoom = 17;
 
+    const bottomNavbar = document.getElementById('bottom-navbar');
+    let hideControlsTimer = null;
+
     const locateButton = document.getElementById('locate-btn');
     const arButton = document.getElementById('ar-btn');
     const startNavButton = document.getElementById('start-nav-btn');
@@ -70,6 +73,14 @@ async function initMap() {
     const compassIndicator = document.getElementById('compass-indicator');
     const compassNeedle = document.getElementById('compass-needle');
     const degreeIndicator = document.getElementById('degree-indicator');
+
+    const openSearchBtn = document.getElementById('open-search-btn');
+    const closeSearchBtn = document.getElementById('close-search-btn');
+    const searchPanel = document.getElementById('search-panel');
+    const searchInput = document.getElementById('search-input');
+    const allLocationsList = document.getElementById('all-locations-list');
+    let allLocationsData = []; 
+
 
     // --- 4. EVENT LISTENERS ---
     
@@ -106,19 +117,78 @@ async function initMap() {
     });
 
 
-    map.addListener('dragstart', interruptNavigation); 
-    mapElement.addEventListener('wheel', interruptNavigation, { passive: true });
+    // --- Listener Interaksi Peta ---
+    map.addListener('dragstart', () => {
+        interruptNavigation();
+        hideMapControls();
+    }); 
     
+    mapElement.addEventListener('wheel', () => {
+        interruptNavigation();
+        hideMapControls();
+    }, { passive: true });
+    
+    map.addListener('zoom_changed', hideMapControls);
+
+    // --- Listener Idle Peta ---
     map.addListener('idle', () => {
         if (wasNavigating) {
             startSnapBackTimer();
         }
+
+        // --- Logika Tampilkan Navbar ---
+        clearTimeout(hideControlsTimer);
+        // 2 detik (2000ms)
+        hideControlsTimer = setTimeout(showMapControls, 2000); 
     });
 
-    // --- PERUBAHAN BESAR: Listener Orientasi + Smoothing ---
+    // Listener Panel Search
+    openSearchBtn.addEventListener('click', function() { 
+         searchPanel.classList.remove('-translate-y-full');
+         searchInput.focus();
+    });
+    closeSearchBtn.addEventListener('click', function() { 
+        searchPanel.classList.add('-translate-y-full');
+    });
+
+    allLocationsList.addEventListener('click', function(e) {
+         const item = e.target.closest('.location-item');
+        if (!item) return; 
+
+        const lat = parseFloat(item.dataset.lat);
+        const lon = parseFloat(item.dataset.lon);
+        const locationBtn = e.target.closest('.location-btn');
+        
+        if (locationBtn) {
+            isProgrammaticMove = true;
+            map.setCenter({ lat: lat, lng: lon });
+            map.setZoom(19);
+            const idleListener = map.addListener('idle', () => {
+                isProgrammaticMove = false;
+                idleListener.remove();
+            });
+        } else {
+            requestRouteToLocation(lat, lon);
+        }
+        searchPanel.classList.add('-translate-y-full');
+    });
+
+    searchInput.addEventListener('keyup', function(e) { 
+        const searchTerm = e.target.value.toLowerCase();
+        const items = allLocationsList.getElementsByClassName('location-item');
+        Array.from(items).forEach(item => {
+            const namaLokasi = item.dataset.nama.toLowerCase(); 
+            if (namaLokasi.includes(searchTerm)) {
+                item.style.display = 'flex';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    });
+
+
+    // --- Listener Orientasi + Smoothing ---
     function handleOrientation(event) {
-        // event.webkitCompassHeading untuk iOS (Safari)
-        // event.alpha untuk standar (Android/Chrome)
         let alpha = event.webkitCompassHeading || event.alpha;
         if (alpha == null) return;
         const correctedAlpha = (360 - alpha) % 360;
@@ -127,44 +197,30 @@ async function initMap() {
             smoothedAlpha = correctedAlpha;
         } else {
             let diff = correctedAlpha - smoothedAlpha
-            // Atasi "Gimbal Lock" (lompatan dari 359 ke 0)
             if (diff > 180) { diff -= 360; }
             if (diff < -180) { diff += 360; }
-            
             smoothedAlpha += diff * smoothingFactor;
-            
-            // Normalisasi 0-360
             smoothedAlpha = smoothedAlpha % 360;
             if (smoothedAlpha < 0) { smoothedAlpha += 360; }
         }
         
-        // 2. Gunakan nilai yang sudah di-smooth untuk SEMUANYA
         lastCompassAlpha = smoothedAlpha; 
-        
-        // 3. Panggil fungsi update UI derajat dengan nilai yang di-smooth
         updateRealCompassDegree(smoothedAlpha);
         
-        // Tampilkan UI Kompas jika ini panggilan pertama
         if (compassIndicator && compassIndicator.style.display === 'none') {
             compassIndicator.style.display = 'flex';
         }
-        
-        // Tampilkan UI Derajat jika ini panggilan pertama
         if (degreeIndicator && degreeIndicator.style.display === 'none') {
             degreeIndicator.style.display = 'flex';
         }
-
-        updateCompassRotation(); // Panggil fungsi update rotasi kerucut
+        updateCompassRotation();
     }
     
     if (window.DeviceOrientationEvent) {
-        // Coba gunakan 'absolute' untuk data yang lebih konsisten (True North)
-        // Ini adalah event yang digunakan di ar-maps-test.html
         try {
             window.addEventListener('deviceorientationabsolute', handleOrientation, true);
             console.log("Menggunakan 'deviceorientationabsolute'.");
         } catch (e) {
-            // Fallback jika 'absolute' tidak didukung (jarang terjadi)
             window.addEventListener('deviceorientation', handleOrientation, true);
             console.warn("Fallback ke 'deviceorientation' (mungkin tidak akurat).");
         }
@@ -172,42 +228,54 @@ async function initMap() {
         console.warn("DeviceOrientationEvent (kompas) tidak didukung di browser ini.");
     }
 
-    // Listener saat PETA DIPUTAR oleh user
     map.addListener('heading_changed', updateCompassRotation);
 
 
     // --- 5. FUNGSI LOGIKA INTI ---
 
-    /**
-     * Fungsi terpisah untuk memperbarui UI yang menampilkan 
-     * derajat kompas (0-359) secara nyata.
-     * @param {number} degrees - Nilai kompas mentah (alpha) dari 0-359.
-     */
+    function createLocationListItem(lokasi) {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'location-item bg-[#1f3a5f] rounded-xl p-4 flex items-center gap-4 cursor-pointer';
+        itemDiv.dataset.nama = lokasi.nama.toLowerCase(); 
+        itemDiv.dataset.lat = lokasi.lat;
+        itemDiv.dataset.lon = lokasi.lon;
+        itemDiv.dataset.nama = lokasi.nama;
+
+        const initial = lokasi.nama.charAt(0).toUpperCase() || 'L';
+        
+        itemDiv.innerHTML = `
+            <div class="flex-shrink-0 w-10 h-10 rounded-full bg-purple-200 text-purple-700 flex items-center justify-center font-bold">
+                ${initial}
+            </div>
+            <div class="flex-grow min-w-0">
+                <h3 class="text-white font-semibold truncate">${lokasi.nama}</h3>
+                <p class="text-gray-300 text-sm truncate">${lokasi.deskripsi}</p>
+            </div>
+            <div class="flex-shrink-0 flex gap-2">
+                <button title="Show Location" data-lat="${lokasi.lat}" data-lon="${lokasi.lon}" class="location-btn w-9 h-9 bg-gray-600/50 text-white rounded-lg flex items-center justify-center">
+                    <i class="fas fa-location-dot"></i>
+                </button>
+                <button title="Create Route" data-lat="${lokasi.lat}" data-lon="${lokasi.lon}" data-nama="${lokasi.nama}" class="route-btn w-9 h-9 bg-gray-600/50 text-white rounded-lg flex items-center justify-center">
+                    <i class="fas fa-route"></i>
+                </button>
+            </div>
+        `;
+        return itemDiv;
+    }
+
     function updateRealCompassDegree(degrees) {
         if (degreeIndicator) {
-            // Bulatkan ke integer terdekat
             const roundedDegrees = Math.round(degrees);
-            // Update teks di dalam elemen
             degreeIndicator.textContent = `${roundedDegrees}°`;
         }
     }
 
-    // --- FUNGSI UNTUK MENGHITUNG & MENERAPKAN ROTASI ---
     function updateCompassRotation() {
         if (!userMarker) return;
-
         const mapHeading = map.getHeading() || 0; 
-        
         const targetConeHeading = lastCompassAlpha - mapHeading;
-        
         let coneDelta = targetConeHeading - correctedHeading;
-
-        if (coneDelta > 180) {
-            coneDelta -= 360; 
-        } else if (coneDelta < -180) {
-            coneDelta += 360; 
-        }
-        
+        if (coneDelta > 180) { coneDelta -= 360; } else if (coneDelta < -180) { coneDelta += 360; }
         correctedHeading += coneDelta;
         
         const headingEl = userMarker.content.querySelector('.user-location-heading');
@@ -215,16 +283,9 @@ async function initMap() {
             headingEl.style.transform = `translate(-50%, -50%) rotate(${correctedHeading}deg)`;
         }
 
-        // --- 2. LOGIKA UNTUK JARUM KOMPAS (NEEDLE UI) ---
         const targetNeedleHeading = correctedHeading + mapHeading;
         let needleDelta = targetNeedleHeading - correctedNeedleHeading;
-        
-        if (needleDelta > 180) {
-            needleDelta -= 360;
-        } else if (needleDelta < -180) {
-            needleDelta += 360;
-        }
-
+        if (needleDelta > 180) { needleDelta -= 360; } else if (needleDelta < -180) { needleDelta += 360; }
         correctedNeedleHeading += needleDelta;
 
         if (compassNeedle) {
@@ -234,7 +295,6 @@ async function initMap() {
 
     function startWatchingLocation() {
         if (watchId) return; 
-
         if (navigator.geolocation) {
             watchId = navigator.geolocation.watchPosition(
                 updateUserLocation, 
@@ -264,8 +324,6 @@ async function initMap() {
         }
         
         userMarker.position = userPosition;
-
-        // Panggil fungsi update kompas
         updateCompassRotation(); 
 
         if (isNavigating) {
@@ -289,7 +347,6 @@ async function initMap() {
         directionsService.route(request)
             .then((response) => {
                 directionsRenderer.setDirections(response); 
-                
                 startNavButton.style.display = 'flex'; 
                 cancelNavButton.style.display = 'none'; 
 
@@ -317,20 +374,28 @@ async function initMap() {
                 window.alert('Permintaan rute gagal: ' + e);
             });
     }
+
+    function requestRouteToLocation(lat, lon) {
+        if (!userPosition) {
+            alert('Silakan tekan tombol "Locate Me" terlebih dahulu untuk menentukan lokasi Anda.');
+            startWatchingLocation(); 
+            return;
+        }
+        const destination = new LatLng(lat, lon);
+        pendingDestination = destination; 
+        calculateAndDisplayRoute(userPosition, destination);
+    }
     
     function startNavigationMode() {
         isNavigating = true;
         wasNavigating = false;
         clearTimeout(snapBackTimer);
-        
         startNavButton.style.display = 'none';   
         cancelNavButton.style.display = 'flex';  
-
         startWatchingLocation();
         
         if (userPosition) {
             isProgrammaticMove = true; 
-            
             map.setCenter(userPosition);
             map.setTilt(60);
             map.setZoom(19);
@@ -348,7 +413,6 @@ async function initMap() {
         wasNavigating = false;
         clearTimeout(snapBackTimer);
         snapBackTimer = null;
-
         isProgrammaticMove = true;
         map.setCenter(defaultCenter);
         map.setZoom(defaultZoom);
@@ -365,15 +429,12 @@ async function initMap() {
             console.log("Ignoring programmatic move...");
             return; 
         }
-        
         clearTimeout(snapBackTimer);
-        
         if (isNavigating) {
             console.log('User interrupted navigation.');
             isNavigating = false;
             wasNavigating = true; 
         }
-        
         if (cancelNavButton.style.display === 'flex') {
              cancelNavButton.style.display = 'none';
         }
@@ -383,14 +444,10 @@ async function initMap() {
         if (isProgrammaticMove) {
             return;
         }
-
         clearTimeout(snapBackTimer);
-        
         if (wasNavigating && directionsRenderer.getDirections()?.routes.length > 0) {
             console.log('User stopped. Starting 4-second snap-back timer...');
-            
             cancelNavButton.style.display = 'flex';
-
             snapBackTimer = setTimeout(() => {
                 console.log('Timer finished. Snapping back to navigation.');
                 startNavigationMode(); 
@@ -400,19 +457,28 @@ async function initMap() {
         }
     }
 
+    function hideMapControls() {
+        if (bottomNavbar) {
+            clearTimeout(hideControlsTimer);
+            bottomNavbar.classList.add('translate-y-full');
+        }
+    }
+
+    function showMapControls() {
+        if (bottomNavbar) {
+            bottomNavbar.classList.remove('translate-y-full');
+        }
+    }
+
     function buildUserMarker() {
         const markerEl = document.createElement('div');
         markerEl.className = 'user-location-marker';
-        
         const headingEl = document.createElement('div');
         headingEl.className = 'user-location-heading';
-        
         const dotEl = document.createElement('div');
         dotEl.className = 'user-location-dot';
-        
-        markerEl.appendChild(headingEl); // Beam/kerucut
-        markerEl.appendChild(dotEl);     // Titik biru (di atas)
-        
+        markerEl.appendChild(headingEl);
+        markerEl.appendChild(dotEl);     
         return markerEl;
     }
 
@@ -446,6 +512,9 @@ async function initMap() {
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const locations = await response.json();
 
+        allLocationsData = locations;
+        allLocationsList.innerHTML = ''; 
+
         locations.forEach(location => {
             const marker = new AdvancedMarkerElement({
                 map: map,
@@ -454,17 +523,11 @@ async function initMap() {
             });
 
             marker.addListener('click', () => {
-                if (!userPosition) {
-                    alert('Silakan tekan tombol "Locate Me" terlebih dahulu untuk menentukan lokasi Anda.');
-                    startWatchingLocation(); 
-                    return;
-                }
-
-                const destination = new LatLng(location.lat, location.lon);
-                pendingDestination = destination; 
-
-                calculateAndDisplayRoute(userPosition, destination);
+                requestRouteToLocation(location.lat, location.lon);
             });
+
+            const listItem = createLocationListItem(location);
+            allLocationsList.appendChild(listItem);
         });
 
     } catch (error) {
