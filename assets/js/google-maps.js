@@ -53,9 +53,7 @@ async function initMap() {
     let wasNavigating = false;
     let snapBackTimer = null;
     let pendingDestination = null; 
-    let isProgrammaticMove = false;
-    
-    let isArModeActive = false; 
+    let isProgrammaticMove = false; 
 
     const defaultCenter = new LatLng(-7.5567, 110.7711);
     const defaultZoom = 17;
@@ -83,8 +81,7 @@ async function initMap() {
 
     // Referensi Elemen AR
     const arButton = document.getElementById('ar-btn'); 
-    const arContainer = document.getElementById('ar-container');
-    const arStartButton = document.getElementById('ar-start-button');
+    const arContainer = document.getElementById('ar-container')
     const closeArButton = document.getElementById('close-ar-btn');
 
 
@@ -131,14 +128,13 @@ async function initMap() {
         hideMapControls();
     }, { passive: true });
     map.addListener('zoom_changed', hideMapControls);
+    // SESUDAH
     map.addListener('idle', () => {
         if (wasNavigating) {
             startSnapBackTimer();
         }
         clearTimeout(hideControlsTimer);
-        if (!isArModeActive) {
-            hideControlsTimer = setTimeout(showMapControls, 2000); 
-        }
+        hideControlsTimer = setTimeout(showMapControls, 2000); 
     });
 
     openSearchBtn.addEventListener('click', () => { 
@@ -202,10 +198,6 @@ async function initMap() {
             degreeIndicator.style.display = 'flex';
         }
         updateCompassRotation();
-        
-        if (isArModeActive) {
-            arLogic.feedOrientation(smoothedAlpha);
-        }
     }
     
     function startMapOrientationListener() {
@@ -315,9 +307,6 @@ async function initMap() {
                 idleListener.remove();
             });
         }
-        if (isArModeActive) {
-            arLogic.feedLocation(position);
-        }
     }
     function calculateAndDisplayRoute(origin, destination) { 
         const request = {
@@ -358,6 +347,25 @@ async function initMap() {
             startWatchingLocation(); 
             return;
         }
+
+        // Cek jika ada rute aktif, rute dijeda, atau rute tergambar di peta
+        if (isNavigating || wasNavigating || (directionsRenderer.getDirections() && directionsRenderer.getDirections().routes.length > 0)) {
+            console.log('Rute lama dibatalkan untuk membuat rute baru.');
+            
+            // 1. Hapus rute lama dari peta
+            directionsRenderer.setDirections({ routes: [] }); 
+            
+            // 2. Reset semua status navigasi
+            pendingDestination = null;
+            isNavigating = false;
+            wasNavigating = false;
+            clearTimeout(snapBackTimer);
+            
+            // 3. Sembunyikan tombol-tombol navigasi (akan dimunculkan lagi oleh rute baru)
+            cancelNavButton.style.display = 'none';
+            startNavButton.style.display = 'none';
+        }
+
         const destination = new LatLng(lat, lon);
         pendingDestination = destination; 
         calculateAndDisplayRoute(userPosition, destination);
@@ -433,7 +441,8 @@ async function initMap() {
         }
     }
     function showMapControls() { 
-        if (bottomNavbar) {
+        // Hanya tampilkan navbar jika kita TIDAK sedang dalam mode AR/mini-map
+        if (bottomNavbar && arContainer.style.display !== 'block') {
             bottomNavbar.classList.remove('translate-y-full');
         }
     }
@@ -494,165 +503,68 @@ async function initMap() {
     } catch (error) {
         console.error("Gagal memuat atau mem-parsing location.json:", error);
     }
-    
 
-    // --- 7. LOGIKA UNTUK AR MODE ---
-    const arLogic = {
-        debugUI: document.getElementById('ar-debug-ui'),
-        camera: document.getElementById('cam'),
-        targetRumah: document.getElementById('target-rumah'),
-        arrow: document.getElementById('arrow'),
-        startButton: document.getElementById('ar-start-button'),
-        targetLat: -7.5431893, 
-        targetLon: 110.7698389,
-        currentLat: 0,
-        currentLon: 0,
-        currentAccuracy: 0,
-        currentHeading: null, 
-        init: function() {
-            this.startButton.addEventListener('click', () => {
-                this.startButton.style.display = 'none';
-                this.debugUI.style.display = 'block';
-                if (typeof(DeviceOrientationEvent) !== 'undefined' && typeof(DeviceOrientationEvent.requestPermission) === 'function') {
-                    DeviceOrientationEvent.requestPermission()
-                        .then(response => {
-                            if (response === 'granted') {
-                                console.log("Izin kompas AR diberikan (iOS).");
-                            } else {
-                                this.debugUI.innerHTML = '<span style="color: red;">Izin Kompas ditolak.</span>';
-                            }
-                        })
-                        .catch(() => console.log("Izin kompas AR tidak diperlukan (Android)."));
-                } else {
-                    console.log("Izin kompas AR tidak diperlukan (Android).");
-                }
-            });
-        },
-        feedLocation: function(position) {
-            this.currentLat = position.coords.latitude;
-            this.currentLon = position.coords.longitude;
-            this.currentAccuracy = position.coords.accuracy;
-            this.updateTargetPosition();
-        },
-        feedOrientation: function(heading) {
-            this.currentHeading = heading;
-            this.updateTargetPosition();
-        },
-        updateTargetPosition: function() {
-            if (this.currentLat === 0 || this.currentHeading === null) return; 
-            const distance = this.getDistance(this.currentLat, this.currentLon, this.targetLat, this.targetLon);
-            const bearing = this.getBearing(this.currentLat, this.currentLon, this.targetLat, this.targetLon);
-            let relativeAngle = bearing - this.currentHeading;
-            if (relativeAngle > 180) relativeAngle -= 360;
-            if (relativeAngle < -180) relativeAngle += 360;
-            const angleInRadians = relativeAngle * (Math.PI / 180);
-            const safeDistance = Math.max(1, Math.min(distance, 49000));
-            const posZ = -Math.cos(angleInRadians) * safeDistance;
-            const posX = Math.sin(angleInRadians) * safeDistance;
-            this.targetRumah.setAttribute('position', `${posX} 1.6 ${posZ}`);
-            this.targetRumah.setAttribute('value', `Rumah Saya\n${distance.toFixed(0)} m`);
-            const fovThreshold = 30;
-            const minArrowDistance = 10;
-            if (Math.abs(relativeAngle) > fovThreshold && distance > minArrowDistance) {
-                this.arrow.setAttribute('visible', 'true');
-                this.arrow.setAttribute('rotation', `-90 ${relativeAngle} 0`);
-            } else {
-                this.arrow.setAttribute('visible', 'false');
-            }
-            this.debugUI.innerHTML = `
-              Lat: ${this.currentLat.toFixed(6)}<br>
-              Lon: ${this.currentLon.toFixed(6)}<br>
-              Akurasi: ${this.currentAccuracy.toFixed(1)} m<br>
-              Kompas: ${this.currentHeading.toFixed(1)}°<br>
-              Jarak: ${distance.toFixed(1)} m<br>
-              Bearing: ${bearing.toFixed(1)}°<br>
-              Rel. Sudut: ${relativeAngle.toFixed(1)}°
-            `;
-        },
-        getDistance: function(lat1, lon1, lat2, lon2) {
-            const R = 6371000;
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return R * c;
-        },
-        getBearing: function(lat1, lon1, lat2, lon2) {
-            lat1 = lat1 * Math.PI / 180; lon1 = lon1 * Math.PI / 180;
-            lat2 = lat2 * Math.PI / 180; lon2 = lon2 * Math.PI / 180;
-            const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
-            const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
-            const brng = Math.atan2(y, x) * 180 / Math.PI;
-            return (brng + 360) % 360;
-        }
-    };
-    arLogic.init();
 
-    // --- 8. FUNGSI PERGANTIAN MODE ---
+    // --- 7. FUNGSI PERGANTIAN MODE ---
     
     function switchToAR() {
-        console.log("Beralih ke Mode AR...");
-        isArModeActive = true; 
+        console.log("Switching to AR Mode...");
         
+        // 1. Sembunyikan Navigasi Bawah
         bottomNavbar.classList.add('translate-y-full');
         
-        arContainer.style.display = 'block';
-        arButton.style.display = 'none';
+        // 2. Tampilkan container (yang sekarang kosong)
+        arContainer.style.display = 'block'; 
         
-        arContainer.style.pointerEvents = 'none';
-        arStartButton.style.pointerEvents = 'auto';
-        closeArButton.style.pointerEvents = 'auto';
+        // 3. Atur tombol
+        arButton.style.display = 'none'; // Sembunyikan tombol AR
+        closeArButton.style.display = 'block'; // Tampilkan tombol Close
+        locateButton.style.display = 'none'; // Sembunyikan tombol Locate
         
-        arContainer.style.height = '70%'; // 70% AR
+        // 4. Atur tinggi container kosong
+        arContainer.style.height = '70%'; 
         
-        locateButton.style.display = 'none';
-
-        // --- PERBAIKAN DI SINI (1) ---
-        // Ganti kelas posisi tombol navigasi
+        // 5. Pindahkan tombol navigasi ke atas mini-map
         startNavButton.classList.remove('bottom-52');
         cancelNavButton.classList.remove('bottom-52');
-        startNavButton.classList.add('bottom-4'); // 1rem from bottom
-        cancelNavButton.classList.add('bottom-4'); // 1rem from bottom
+        startNavButton.classList.add('bottom-4');
+        cancelNavButton.classList.add('bottom-4'); 
 
+        // 6. Turunkan dan resize peta
         mapElement.style.top = '70%'; 
-        mapElement.style.height = '30%'; // 30% Peta
-
-        console.log("Sensor Peta tetap berjalan untuk mini-map.");
-        console.log("Mode AR siap. Menunggu pengguna menekan 'Mulai AR'.");
+        mapElement.style.height = '30%';
     }
 
     function switchToMap() {
-        console.log("Kembali ke Mode Peta...");
-        isArModeActive = false; 
+        console.log("Switching to Map Mode...");
 
+        // 1. Tampilkan Navigasi Bawah
         bottomNavbar.classList.remove('translate-y-full');
 
+        // 2. Sembunyikan container kosong
         arContainer.style.display = 'none';
-        arButton.style.display = 'flex'; 
-
-        arContainer.style.pointerEvents = 'auto';
         
-        arContainer.style.height = '100%';
-        locateButton.style.display = 'flex';
+        // 3. Atur tombol
+        arButton.style.display = 'flex'; // Tampilkan tombol AR
+        closeArButton.style.display = 'none'; // Sembunyikan tombol Close
+        locateButton.style.display = 'flex'; // Tampilkan tombol Locate
 
-        // --- PERBAIKAN DI SINI (2) ---
-        // Kembalikan kelas posisi tombol navigasi
+        // 4. Kembalikan tinggi container
+        arContainer.style.height = '100%';
+        
+        // 5. Kembalikan posisi tombol navigasi
         startNavButton.classList.remove('bottom-4');
         cancelNavButton.classList.remove('bottom-4');
         startNavButton.classList.add('bottom-52');
         cancelNavButton.classList.add('bottom-52');
         
+        // 6. Kembalikan peta ke full screen
         mapElement.style.top = '0';
         mapElement.style.height = '100%';
-
-        arLogic.debugUI.style.display = 'none'; 
-        arLogic.startButton.style.display = 'block'; 
-
-        console.log("Sensor Peta sudah berjalan.");
     }
 
 
-    // --- 9. MULAI PELACAKAN LOKASI (PETA) SAAT AWAL DIMUAT ---
+    // --- 8. MULAI PELACAKAN LOKASI (PETA) SAAT AWAL DIMUAT ---
     startWatchingLocation();
     startMapOrientationListener();
 }

@@ -9,8 +9,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         body {
@@ -25,25 +23,6 @@
         .user-location-marker { position: relative; width: 22px; height: 22px; transform: translate(-50%, -50%); pointer-events: none; }
         .user-location-dot { width: 18px; height: 18px; border-radius: 50%; background-color: #1a73e8; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.4); position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2; }
         .user-location-heading { width: 60px; height: 60px; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(0deg); transform-origin: center center; background: conic-gradient( from 300deg at 50% 50%, #1a73e84D 0deg, #1a73e84D 120deg, transparent 120.1deg, transparent 360deg ); border-radius: 50%; z-index: 1; transition: transform 0.2s ease-out; }
-
-        /* --- STYLE BARU: Untuk UI AR --- */
-        #ar-debug-ui {
-            position: fixed; top: 10px; left: 10px;
-            background-color: rgba(0, 0, 0, 0.7);
-            color: white; padding: 10px; border-radius: 5px;
-            font-family: monospace; z-index: 999;
-        }
-        #ar-start-button {
-            position: fixed;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 24px;
-            padding: 20px;
-            background: #fff;
-            border: 2px solid #000;
-            border-radius: 10px;
-            z-index: 10000;
-        }
     </style>
 
     <script src="assets/js/config.js"></script>
@@ -65,54 +44,23 @@
         </gmp-map>
 
         <div id="ar-container" class="absolute top-0 left-0 right-0 h-full z-30" style="display: none;">
-            
-            <button id="ar-start-button">Mulai AR</button>
-            
-            <div id="ar-debug-ui" style="display: none;">
-              Menunggu data GPS & Kompas...
-            </div>
-            
-            <button id="close-ar-btn" title="Tutup AR" class="absolute top-20 right-5 z-50 bg-red-500 text-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-xl">
+            <button id="close-ar-btn" title="Tutup AR" class="absolute top-20 right-5 z-50 bg-red-500 text-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-xl" style="display: none;">
                 <i class="fas fa-times"></i>
             </button>
-            
-            <a-scene id="ar-scene" vr-mode-ui="enabled: false" renderer="logarithmicDepthBuffer: true" class="absolute top-0 left-0 right-0 h-full">
-                <a-camera id="cam" 
-                    look-controls-enabled="false" 
-                    camera="far: 50000; near: 0.1">
-                </a-camera>
-                <a-text
-                    id="target-rumah"
-                    value="Rumah Saya (Menghitung...)"
-                    scale="5 5 5"
-                    color="#FF0000"
-                    position="0 0 -10" 
-                    look-at="[camera]"
-                ></a-text>
-                <a-triangle 
-                    id="arrow"
-                    visible="false"
-                    position="0 0.5 -3"    
-                    rotation="-90 0 0"     
-                    scale="0.5 0.5 0.5"
-                    color="#00FFFF"
-                    vertex-a="0 1 0"
-                    vertex-b="-1 -1 0"
-                    vertex-c="1 -1 0"
-                ></a-triangle>
-            </a-scene>
         </div>
+
         <div id="compass-indicator" class="absolute top-24 left-5 z-10 w-20 h-20 rounded-full bg-white/80 backdrop-blur-sm shadow-lg flex justify-center items-center text-gray-800 font-bold text-sm" style="display: none;"> <span class="absolute top-1.5">N</span><span class="absolute right-2.5">E</span><span class="absolute bottom-1.5">S</span><span class="absolute left-2.5">W</span><div id="compass-needle" class="absolute w-full h-full" style="transform: rotate(0deg); transition: transform 0.2s ease-out;"><i class="fas fa-long-arrow-alt-up text-red-600 text-3xl absolute top-1 left-1/2 -translate-x-1/2"></i><i class="fas fa-long-arrow-alt-down text-gray-500 text-xl absolute bottom-1 left-1/2 -translate-x-1/2"></i></div></div>
+        
         <div id="degree-indicator" class="absolute top-48 left-5 z-10 w-20 p-2 rounded-lg bg-white/80 backdrop-blur-sm shadow-lg flex justify-center items-center text-gray-800 font-bold text-lg" style="display: none;">0°</div>
         
-        <header class="absolute top-0 left-0 right-0 z-10 text-white flex justify-center items-center p-5 bg-gradient-to-b from-black/60 to-transparent">
+        <header class="absolute top-0 left-0 right-0 z-50 text-white flex justify-center items-center p-5 bg-gradient-to-b from-black/60 to-transparent">
             <img src="assets/images/Resmi_Logo_UMS_White_ShortText.png" alt="logo" class="h-8 mt-2">
             <button id="open-search-btn" class="text-xl absolute right-5" title="Search locations">
                 <i class="mr-2 mt-2 fas fa-search"></i>
             </button>
         </header>
         
-        <div id="search-panel" class="absolute inset-0 z-20 bg-[#0c2340] flex flex-col transition-transform duration-300 ease-in-out -translate-y-full">
+        <div id="search-panel" class="absolute inset-0 z-50 bg-[#0c2340] flex flex-col transition-transform duration-300 ease-in-out -translate-y-full">
             <main class="flex-grow p-5 overflow-y-auto">
                 <div class="flex items-center gap-4 mb-6">
                     <button id="close-search-btn" class="text-white text-xl" title="Back to Map">
