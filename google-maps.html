@@ -47,7 +47,21 @@
             <button id="close-ar-btn" title="Tutup AR" class="absolute top-20 right-5 z-50 bg-red-500 text-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-xl" style="display: none;">
                 <i class="fas fa-times"></i>
             </button>
+
+            <!-- 🔍 Text scanning AR -->
+            <div id="ar-scanning-text"
+                class="absolute inset-0 flex items-center justify-center text-white text-lg font-semibold"
+                style="text-shadow: 0 0 10px black; background: rgba(0,0,0,0.3); display: none; z-index: 40;">
+                🔍 Scanning environment...
+            </div>
+            <div id="ar-map-overlay"
+                class="absolute left-1/2 bottom-6 -translate-x-1/2 w-[92%] h-56 rounded-3xl overflow-hidden shadow-2xl bg-white z-50"
+                style="display:none;">
+                <!-- container mini map -->
+                <div id="ar-map-inner" class="w-full h-full"></div>
+            </div>
         </div>
+
 
         <div id="compass-indicator" class="absolute top-24 left-5 z-10 w-20 h-20 rounded-full bg-white/80 backdrop-blur-sm shadow-lg flex justify-center items-center text-gray-800 font-bold text-sm" style="display: none;"> <span class="absolute top-1.5">N</span><span class="absolute right-2.5">E</span><span class="absolute bottom-1.5">S</span><span class="absolute left-2.5">W</span><div id="compass-needle" class="absolute w-full h-full" style="transform: rotate(0deg); transition: transform 0.2s ease-out;"><i class="fas fa-long-arrow-alt-up text-red-600 text-3xl absolute top-1 left-1/2 -translate-x-1/2"></i><i class="fas fa-long-arrow-alt-down text-gray-500 text-xl absolute bottom-1 left-1/2 -translate-x-1/2"></i></div></div>
         

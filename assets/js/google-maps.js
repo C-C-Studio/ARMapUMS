@@ -7,6 +7,16 @@
 
 // Impor modul geofence dari file sebelah
 import { initGeofence, isUserOnCampus } from './geofence-google.js';
+import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+
+// 🔽 tambahkan ini
+const arMapOverlay = document.getElementById('ar-map-overlay');
+const arMapInner = document.getElementById('ar-map-inner');
+let arMiniMap = null;
+let arMiniDirectionsRenderer = null;
+let arMiniUserMarker = null;
+
+
 
 async function initMap() {
     
@@ -49,6 +59,9 @@ async function initMap() {
     let smoothedAlpha = null; 
     const smoothingFactor = 0.1; 
 
+    // 🔄 Heading yang akan dipakai AR
+    let arHeading = 0;
+
     let isNavigating = false;
     let wasNavigating = false;
     let snapBackTimer = null;
@@ -84,6 +97,18 @@ async function initMap() {
     const arContainer = document.getElementById('ar-container')
     const closeArButton = document.getElementById('close-ar-btn');
 
+    function setARButtonEnabled(enabled) {
+        if (!arButton) return;
+        if (enabled) {
+            arButton.disabled = false;
+            arButton.classList.remove('opacity-40', 'pointer-events-none');
+        } else {
+            arButton.disabled = true;
+            arButton.classList.add('opacity-40', 'pointer-events-none');
+        }
+    }
+
+
 
     // --- 4. EVENT LISTENERS ---
     
@@ -118,6 +143,7 @@ async function initMap() {
         
         cancelNavigationMode(); 
     });
+
 
     map.addListener('dragstart', () => {
         interruptNavigation();
@@ -176,19 +202,26 @@ async function initMap() {
     function handleMapOrientation(event) {
         let alpha = event.webkitCompassHeading || event.alpha;
         if (alpha == null) return;
+
         const correctedAlpha = (360 - alpha) % 360;
         
         if (smoothedAlpha === null) {
             smoothedAlpha = correctedAlpha;
         } else {
-            let diff = correctedAlpha - smoothedAlpha
+            let diff = correctedAlpha - smoothedAlpha;
             if (diff > 180) { diff -= 360; }
             if (diff < -180) { diff += 360; }
             smoothedAlpha += diff * smoothingFactor;
-            smoothedAlpha = (smoothedAlpha % 360 + 360) % 360; // Normalisasi
+            smoothedAlpha = (smoothedAlpha % 360 + 360) % 360;
         }
         
         lastCompassAlpha = smoothedAlpha; 
+
+        // 🔄 SIMPAN UNTUK AR
+        arHeading = smoothedAlpha;
+        // opsional: global untuk debugging
+        window.__UMS_AR_HEADING = smoothedAlpha;
+
         updateRealCompassDegree(smoothedAlpha);
         
         if (compassIndicator && compassIndicator.style.display === 'none') {
@@ -199,6 +232,7 @@ async function initMap() {
         }
         updateCompassRotation();
     }
+
     
     function startMapOrientationListener() {
         if (window.DeviceOrientationEvent) {
@@ -253,24 +287,35 @@ async function initMap() {
         }
     }
     function updateCompassRotation() { 
-        if (!userMarker) return;
+        if (!userMarker && !arMiniUserMarker) return;
+
         const mapHeading = map.getHeading() || 0; 
         const targetConeHeading = lastCompassAlpha - mapHeading;
         let coneDelta = targetConeHeading - correctedHeading;
-        if (coneDelta > 180) { coneDelta -= 360; } else if (coneDelta < -180) { coneDelta += 360; }
+        if (coneDelta > 180) { coneDelta -= 360; } 
+        else if (coneDelta < -180) { coneDelta += 360; }
         correctedHeading += coneDelta;
-        const headingEl = userMarker.content.querySelector('.user-location-heading');
-        if (headingEl) {
-            headingEl.style.transform = `translate(-50%, -50%) rotate(${correctedHeading}deg)`;
+
+        // 🔁 update cone di semua marker yang ada
+        const markers = [userMarker, arMiniUserMarker].filter(Boolean);
+        for (const m of markers) {
+            const headingEl = m.content.querySelector('.user-location-heading');
+            if (headingEl) {
+                headingEl.style.transform = `translate(-50%, -50%) rotate(${correctedHeading}deg)`;
+            }
         }
+
         const targetNeedleHeading = correctedHeading + mapHeading;
         let needleDelta = targetNeedleHeading - correctedNeedleHeading;
-        if (needleDelta > 180) { needleDelta -= 360; } else if (needleDelta < -180) { needleDelta += 360; }
+        if (needleDelta > 180) { needleDelta -= 360; } 
+        else if (needleDelta < -180) { needleDelta += 360; }
         correctedNeedleHeading += needleDelta;
+
         if (compassNeedle) {
             compassNeedle.style.transform = `rotate(${correctedNeedleHeading}deg)`;
         }
     }
+
     function startWatchingLocation() { 
         if (watchId) return; 
         if (navigator.geolocation) {
@@ -283,12 +328,16 @@ async function initMap() {
             alert('Error: Browser Anda tidak mendukung Geolocation.');
         }
     }
+
     function updateUserLocation(position) { 
         const { latitude, longitude } = position.coords; 
         userPosition = new LatLng(latitude, longitude);
+
         if (!isUserOnCampus(userPosition)) {
             // console.warn('Anda terdeteksi berada di luar area kampus.');
         }
+
+        // marker di MAP UTAMA
         if (!userMarker) {
             userMarker = new AdvancedMarkerElement({
                 map: map,
@@ -298,7 +347,23 @@ async function initMap() {
             });
         }
         userMarker.position = userPosition;
-        updateCompassRotation(); 
+
+        // marker di MINI MAP (mode AR)
+        if (arMiniMap) {
+            if (!arMiniUserMarker) {
+                arMiniUserMarker = new AdvancedMarkerElement({
+                    map: arMiniMap,
+                    content: buildUserMarker(),   // bentuk & cone sama
+                    title: 'Lokasi Anda (AR)',
+                    zIndex: 100
+                });
+            }
+            arMiniUserMarker.position = userPosition;
+            arMiniMap.setCenter(userPosition);
+        }
+
+        updateCompassRotation();
+
         if (isNavigating) {
             isProgrammaticMove = true;
             map.setCenter(userPosition); 
@@ -308,6 +373,7 @@ async function initMap() {
             });
         }
     }
+
     function calculateAndDisplayRoute(origin, destination) { 
         const request = {
             origin: origin,
@@ -316,7 +382,11 @@ async function initMap() {
         };
         directionsService.route(request)
             .then((response) => {
-                directionsRenderer.setDirections(response); 
+                directionsRenderer.setDirections(response);
+                // 🔽 gambar rute juga di mini map kalau sudah dibuat
+                if (arMiniDirectionsRenderer) {
+                    arMiniDirectionsRenderer.setDirections(response);
+                }
                 startNavButton.style.display = 'flex'; 
                 cancelNavButton.style.display = 'none'; 
                 const bounds = new LatLngBounds(); 
@@ -375,7 +445,8 @@ async function initMap() {
         wasNavigating = false;
         clearTimeout(snapBackTimer);
         startNavButton.style.display = 'none';   
-        cancelNavButton.style.display = 'flex';  
+        cancelNavButton.style.display = 'flex';
+        setARButtonEnabled(true);  
         startWatchingLocation();
         if (userPosition) {
             isProgrammaticMove = true; 
@@ -394,6 +465,7 @@ async function initMap() {
         wasNavigating = false;
         clearTimeout(snapBackTimer);
         snapBackTimer = null;
+        setARButtonEnabled(false);
         isProgrammaticMove = true;
         map.setCenter(defaultCenter);
         map.setZoom(defaultZoom);
@@ -507,62 +579,384 @@ async function initMap() {
 
     // --- 7. FUNGSI PERGANTIAN MODE ---
     
-    function switchToAR() {
+        // =========================
+    // === AR NAVIGATION (WebXR)
+    // =========================
+
+    let arInitialized = false;
+    let arSession = null;
+    let arRenderer, arScene, arCamera, arReticle;
+    let arHitTestSource = null;
+    let arLocalSpace = null;
+    let arSurfaceDetected = false;
+    let arNavSpheres = [];
+
+    const arScanningText = document.getElementById('ar-scanning-text');
+
+    // rute sederhana (contoh dari index.html)
+    // arRoute sekarang hanya dipakai untuk jarak bola (bukan arah)
+    const arRoute = [
+        { distance: 5 }   // mis: 5 meter ke depan
+    ];
+    let arCurrentStep = 0;
+    let arTargetHeading = 0;          // akan diisi dari rute
+    const AR_ANGLE_THRESHOLD = 5;   // boleh ±45°
+    const AR_HYSTERESIS_ANGLE = 90;  // jarak sebelum dianggap "lari jauh"
+    const LOST_FRAMES_THRESHOLD = 9999; // praktis: tidak auto-hapus
+    let arSphereSpawned = false;
+    let arSphereTravelled = false;
+    let arLostHeadingFrames = 0;
+
+    function shortestAngleDiff(a, b) {
+        let diff = a - b;
+        diff = ((diff + 180) % 360) - 180;
+        return Math.abs(diff);
+    }
+
+
+    // Hitung bearing (derajat) dari satu titik ke titik lain
+    function computeBearing(fromLatLng, toLatLng) {
+        if (!fromLatLng || !toLatLng) return null;
+
+        const lat1 = fromLatLng.lat() * Math.PI / 180;
+        const lon1 = fromLatLng.lng() * Math.PI / 180;
+        const lat2 = toLatLng.lat() * Math.PI / 180;
+        const lon2 = toLatLng.lng() * Math.PI / 180;
+
+        const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
+        const x =
+            Math.cos(lat1) * Math.sin(lat2) -
+            Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
+
+        const brng = Math.atan2(y, x) * 180 / Math.PI;
+        return (brng + 360) % 360; // normalisasi 0–360
+    }
+
+    // Ambil heading navigasi saat ini dari rute (arah dari posisi user ke tujuan)
+    function getNavHeadingFromRoute() {
+        const dir = directionsRenderer.getDirections();
+        if (!dir || !dir.routes || !dir.routes.length) return null;
+
+        const route = dir.routes[0];
+        const leg = route.legs && route.legs[0];
+        if (!leg) return null;
+
+        // kalau GPS belum sempat update, pakai titik start rute dulu
+        const from = userPosition || leg.start_location;
+        const dest = leg.end_location;
+
+        return computeBearing(from, dest);
+    }
+
+
+
+    function initARRenderer() {
+        if (arInitialized) return;
+        arInitialized = true;
+
+        arRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        arRenderer.xr.enabled = true;
+
+        const rect = arContainer.getBoundingClientRect();
+        arRenderer.setSize(rect.width, rect.height);
+
+        arScene = new THREE.Scene();
+        arCamera = new THREE.PerspectiveCamera(70, rect.width / rect.height, 0.01, 20);
+        arScene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
+        arScene.add(arCamera);
+
+        // reticle (lingkaran hijau di lantai)
+        const ringGeo = new THREE.RingGeometry(0.1, 0.11, 32).rotateX(-Math.PI / 2);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        arReticle = new THREE.Mesh(ringGeo, ringMat);
+        arReticle.matrixAutoUpdate = false;
+        arReticle.visible = false;
+        arScene.add(arReticle);
+
+        arContainer.appendChild(arRenderer.domElement);
+
+        window.addEventListener("resize", () => {
+            const r = arContainer.getBoundingClientRect();
+            arCamera.aspect = r.width / r.height;
+            arCamera.updateProjectionMatrix();
+            arRenderer.setSize(r.width, r.height);
+        });
+    }
+
+    async function startARSession() {
+        if (!navigator.xr) {
+            alert("WebXR tidak didukung di perangkat ini.");
+            return;
+        }
+        if (arSession) return;
+
+        initARRenderer();
+
+        try {
+            const session = await navigator.xr.requestSession("immersive-ar", {
+                requiredFeatures: ["hit-test", "dom-overlay"],
+                domOverlay: { root: arContainer }   // 👈 AR overlay hanya di dalam container atas
+            });
+
+            arSession = session;
+            arRenderer.xr.setReferenceSpaceType("local");
+            await arRenderer.xr.setSession(session);
+
+            const refSpace = await session.requestReferenceSpace("local");
+            const viewerSpace = await session.requestReferenceSpace("viewer");
+            arLocalSpace = refSpace;
+            arHitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+
+            arSurfaceDetected = false;
+            if (arScanningText) {
+                arScanningText.style.display = 'flex';
+            }
+
+            session.addEventListener("end", () => {
+                arSession = null;
+                arHitTestSource = null;
+                arLocalSpace = null;
+                arSurfaceDetected = false;
+                if (arScanningText) arScanningText.style.display = 'none';
+                arRenderer.setAnimationLoop(null);
+            });
+
+            arRenderer.setAnimationLoop(onARFrame);
+        } catch (e) {
+            console.error(e);
+            alert("Gagal memulai AR: " + e.message);
+        }
+    }
+
+    function stopARSession() {
+        if (arSession) {
+            arSession.end();
+        }
+    }
+
+    function addNavigationSpheres(originPose) {
+        // kalau index di luar jangkauan, jangan lakukan apa-apa
+        if (!originPose || arCurrentStep < 0 || arCurrentStep >= arRoute.length) return;
+
+        const stepDistance = 1.0;
+        const totalDistance = arRoute[arCurrentStep].distance;
+        const numSpheres = Math.floor(totalDistance / stepDistance);
+
+        // matrix pose dari hit-test (reticle)
+        const mat = new THREE.Matrix4().fromArray(originPose.transform.matrix);
+
+        for (let i = 1; i <= numSpheres; i++) {
+            const distance = i * stepDistance;
+
+            // posisi lokal: tepat di depan kamera (arah -Z)
+            const localPos = new THREE.Vector3(0, 0, -distance);
+            const worldPos = localPos.clone().applyMatrix4(mat);
+
+            const sphereGeo = new THREE.SphereGeometry(0.1, 16, 16);
+            const sphereMat = new THREE.MeshBasicMaterial({
+                color: 0x00aaff,
+                transparent: true,
+                opacity: 0.9
+            });
+            const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+
+            sphere.position.copy(worldPos);
+
+            arScene.add(sphere);
+            arNavSpheres.push(sphere);
+        }
+    }
+
+
+
+    function clearNavigationSpheres() {
+        arNavSpheres.forEach(s => arScene.remove(s));
+        arNavSpheres = [];
+    }
+
+    function onARFrame(time, frame) {
+        const session = arRenderer.xr.getSession();
+        if (!session) return;
+
+        if (frame && arHitTestSource && arLocalSpace) {
+            const hitTestResults = frame.getHitTestResults(arHitTestSource);
+            if (hitTestResults.length > 0) {
+                const hit = hitTestResults[0];
+                const pose = hit.getPose(arLocalSpace);
+                arReticle.visible = true;
+                arReticle.matrix.fromArray(pose.transform.matrix);
+
+                if (!arSurfaceDetected) {
+                    arSurfaceDetected = true;
+                    if (arScanningText) arScanningText.style.display = 'none';
+                }
+
+                // logika spawn bola ketika heading cocok
+                // === LOGIKA SPAWN BOLA BERDASARKAN ARAH NAVIGASI ===
+
+                // kalau belum mode navigasi, jangan tampilkan bola
+                // === LOGIKA SPAWN BOLA BERDASARKAN ARAH NAVIGASI ===
+
+                // cek dulu: ada rute aktif atau tidak
+                const dir = directionsRenderer.getDirections();
+                const hasRoute = !!(dir && dir.routes && dir.routes.length);
+
+                // kalau tidak ada rute sama sekali → jangan main bola
+                if (!hasRoute) {
+                    clearNavigationSpheres();
+                    arSphereSpawned = false;
+                    arSphereTravelled = false;
+                    arLostHeadingFrames = 0;
+                } else {
+                    // heading kompas user (dari listener kompas)
+                    const headingNow = (window.__UMS_AR_HEADING ?? arHeading ?? null);
+                    // heading rute (dari Directions)
+                    const navHeading = getNavHeadingFromRoute();
+
+                    // DEBUG (sementara, boleh dihapus nanti)
+                    // console.log('AR headingNow =', headingNow, 'navHeading =', navHeading);
+
+                    if (headingNow != null && navHeading != null) {
+                        // update target heading AR supaya sama dengan arah rute
+                        arTargetHeading = navHeading;
+
+                        const angDiff = shortestAngleDiff(headingNow, arTargetHeading);
+                        // console.log('angDiff =', angDiff);
+
+                        // 🟦 Spawn bola biru hanya kalau arah user ≈ arah navigasi
+                        if (!arSphereSpawned && angDiff <= AR_ANGLE_THRESHOLD) {
+                            console.log('🔵 Spawn bola biru, angDiff =', angDiff);
+                            addNavigationSpheres(pose);
+                            arSphereSpawned = true;
+                            arSphereTravelled = false;
+                            arLostHeadingFrames = 0;
+                        }
+
+                        // if (arSphereSpawned) {
+                        //     const exitThreshold = AR_ANGLE_THRESHOLD + AR_HYSTERESIS_ANGLE;
+
+                        //     if (angDiff > exitThreshold) {
+                        //         arLostHeadingFrames++;     // user menjauh dari arah rute
+                        //     } else {
+                        //         arLostHeadingFrames = 0;
+                        //     }
+
+                        //     if (arLostHeadingFrames >= LOST_FRAMES_THRESHOLD) {
+                        //         console.log('❌ Hapus bola biru, angDiff terlalu besar =', angDiff);
+                        //         clearNavigationSpheres();
+                        //         arSphereSpawned = false;
+                        //         arLostHeadingFrames = 0;
+                        //     }
+                        // }
+                    } else {
+                        // tidak punya heading kompas / heading rute → jangan paksa
+                        if (arSphereSpawned) {
+                            console.log('❌ Hapus bola biru, headingNow/navHeading null');
+                        }
+                        clearNavigationSpheres();
+                        arSphereSpawned = false;
+                        arSphereTravelled = false;
+                        arLostHeadingFrames = 0;
+                    }
+                }
+
+
+                // === akhir logika spawn bola ===
+
+            } else {
+                arReticle.visible = false;
+                if (arSurfaceDetected) {
+                    arSurfaceDetected = false;
+                    if (arScanningText) arScanningText.style.display = 'flex';
+                }
+            }
+        }
+
+        arRenderer.render(arScene, arCamera);
+    }
+
+
+
+
+    async function switchToAR() {
+        if (!isNavigating) {
+        alert('Silakan pilih tujuan dan tekan tombol MULAI sebelum masuk mode AR.');
+        return;
+    }
         console.log("Switching to AR Mode...");
         
-        // 1. Sembunyikan Navigasi Bawah
         bottomNavbar.classList.add('translate-y-full');
         
-        // 2. Tampilkan container (yang sekarang kosong)
         arContainer.style.display = 'block'; 
-        
-        // 3. Atur tombol
-        arButton.style.display = 'none'; // Sembunyikan tombol AR
-        closeArButton.style.display = 'block'; // Tampilkan tombol Close
-        locateButton.style.display = 'none'; // Sembunyikan tombol Locate
-        
-        // 4. Atur tinggi container kosong
-        arContainer.style.height = '70%'; 
-        
-        // 5. Pindahkan tombol navigasi ke atas mini-map
+        arButton.style.display = 'none';
+        closeArButton.style.display = 'block';
+        locateButton.style.display = 'none';
+
+        // tombol nav dipindah agak turun sedikit (opsional)
         startNavButton.classList.remove('bottom-52');
         cancelNavButton.classList.remove('bottom-52');
         startNavButton.classList.add('bottom-4');
         cancelNavButton.classList.add('bottom-4'); 
 
-        // 6. Turunkan dan resize peta
-        mapElement.style.top = '70%'; 
-        mapElement.style.height = '30%';
+        // 🔥 inisialisasi mini map kalau belum ada
+        if (!arMiniMap) {
+            arMiniMap = new Map(arMapInner, {
+                center: userPosition || defaultCenter,
+                zoom: 17,
+                disableDefaultUI: true,
+                clickableIcons: false,
+                mapId: map.getMapTypeId ? map.getMapTypeId() : undefined
+            });
+
+            arMiniDirectionsRenderer = new DirectionsRenderer({
+                suppressMarkers: true,
+                preserveViewport: true,
+            });
+            arMiniDirectionsRenderer.setMap(arMiniMap);
+
+            // kalau rute sudah ada sebelumnya, langsung gambar juga
+            const currentDir = directionsRenderer.getDirections();
+            if (currentDir && currentDir.routes && currentDir.routes.length > 0) {
+                arMiniDirectionsRenderer.setDirections(currentDir);
+            }
+        }
+
+        // tampilkan popup map
+        if (arMapOverlay) {
+            arMapOverlay.style.display = 'block';
+        }
+
+        // mulai AR session
+        await startARSession();
     }
+
 
     function switchToMap() {
         console.log("Switching to Map Mode...");
 
-        // 1. Tampilkan Navigasi Bawah
         bottomNavbar.classList.remove('translate-y-full');
 
-        // 2. Sembunyikan container kosong
         arContainer.style.display = 'none';
-        
-        // 3. Atur tombol
-        arButton.style.display = 'flex'; // Tampilkan tombol AR
-        closeArButton.style.display = 'none'; // Sembunyikan tombol Close
-        locateButton.style.display = 'flex'; // Tampilkan tombol Locate
+        arButton.style.display = 'flex';
+        closeArButton.style.display = 'none';
+        locateButton.style.display = 'flex';
 
-        // 4. Kembalikan tinggi container
-        arContainer.style.height = '100%';
-        
-        // 5. Kembalikan posisi tombol navigasi
         startNavButton.classList.remove('bottom-4');
         cancelNavButton.classList.remove('bottom-4');
         startNavButton.classList.add('bottom-52');
         cancelNavButton.classList.add('bottom-52');
-        
-        // 6. Kembalikan peta ke full screen
-        mapElement.style.top = '0';
-        mapElement.style.height = '100%';
+
+        // sembunyikan popup mini map
+        if (arMapOverlay) {
+            arMapOverlay.style.display = 'none';
+        }
+
+        // hentikan sesi AR
+        stopARSession();
     }
 
+
+    setARButtonEnabled(false);
 
     // --- 8. MULAI PELACAKAN LOKASI (PETA) SAAT AWAL DIMUAT ---
     startWatchingLocation();
