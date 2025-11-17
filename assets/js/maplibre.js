@@ -21,25 +21,48 @@ let pendingRouteDestination = null;
 let activePopup = null; 
 let isProgrammaticTrigger = false;
 
-// ===============================================
-// BARU: Variabel Status Navigasi & Timer
-// ===============================================
+// Variabel Status Navigasi & Timer
 let isNavigating = false; // Status apakah kita dalam mode navigasi
-let wasNavigating = false; // BARU: Flag untuk melacak jika navigasi diinterupsi
+let wasNavigating = false; // Flag untuk melacak jika navigasi diinterupsi
 let snapBackTimer = null; // Timer untuk 'snap back'
 
+// BARU: Variabel untuk rute aktif (untuk Snap-to-Road)
+let currentRouteLine = null;
 
-// ===============================================
-// Panel Search & Tombol Navigasi
-// ===============================================
+let isSnapToRoadActive = false;
+
+// BARU: Variabel Status Kompas
+let lastCompassAlpha = 0;
+let smoothedAlpha = null;
+const smoothingFactor = 0.1;
+let correctedNeedleHeading = 0; // Untuk smoothing jarum kompas
+let userMarker = null;
+let correctedConeHeading = 0; // Untuk smoothing kerucut marker
+
+// Panel Search
 const openSearchBtn = document.getElementById('open-search-btn');
 const closeSearchBtn = document.getElementById('close-search-btn');
 const searchPanel = document.getElementById('search-panel');
 const searchInput = document.getElementById('search-input');
 const allLocationsList = document.getElementById('all-locations-list');
+let allLocationsData = [];
+
+// Tombol Start/Cancel Navigasi
 const startNavBtn = document.getElementById('start-nav-btn');
 const cancelNavBtn = document.getElementById('cancel-nav-btn');
-let allLocationsData = [];
+const snapToRoadBtn = document.getElementById('snap-to-road-btn');
+
+const locateButton = document.getElementById('locate-btn');
+
+// Elemen Kompas Peta
+const compassIndicator = document.getElementById('compass-indicator');
+const compassNeedle = document.getElementById('compass-needle');
+const degreeIndicator = document.getElementById('degree-indicator');
+
+// Referensi Elemen AR
+const arButton = document.getElementById('ar-btn'); 
+const arContainer = document.getElementById('ar-container')
+const closeArButton = document.getElementById('close-ar-btn');
 
 // Fungsi createLocationListItem (Tidak berubah)
 function createLocationListItem(lokasi) {
@@ -72,8 +95,21 @@ function createLocationListItem(lokasi) {
     return itemDiv;
 }
 
+// --- BARU: Fungsi untuk membuat marker pengguna kustom ---
+function buildUserMarker() {
+    const markerEl = document.createElement('div');
+    markerEl.className = 'user-location-marker';
+    const headingEl = document.createElement('div');
+    headingEl.className = 'user-location-heading'; // Ini kerucutnya
+    const dotEl = document.createElement('div');
+    dotEl.className = 'user-location-dot';
+    markerEl.appendChild(headingEl);
+    markerEl.appendChild(dotEl);     
+    return markerEl;
+}
+
 // ===============================================
-// Logika Memuat Data (Marker & Jalur) (Tidak berubah)
+// Logika Memuat Data (Marker & Jalur)
 // ===============================================
 map.on('load', () => {
     // 1. Muat Lokasi (Marker)
@@ -167,16 +203,22 @@ map.on('load', () => {
             });
         })
         .catch(error => console.error('Error memuat data jalur:', error));
+        
+    // ===============================================
+    // BARU: Mulai Listener Kompas & Rotasi Peta
+    // ===============================================
+    startMapOrientationListener();
+    map.on('rotate', updateCompassRotation);
 });
 
 // ===============================================
-// Fungsi untuk membuat rute
+// Fungsi untuk membuat rute (Tidak berubah)
 // ===============================================
 async function createRoute(destLat, destLon, destName) {
-    clearTimeout(snapBackTimer); // Hentikan timer 'snap back'
+    clearTimeout(snapBackTimer); 
     snapBackTimer = null;
-    isNavigating = false;     // Kita tidak sedang bernavigasi
-    wasNavigating = false;  // Kita juga tidak "baru saja" menginterupsi
+    isNavigating = false;     
+    wasNavigating = false;  
     if (!isUserOnCampusFlag) {
         alert("Fitur rute hanya dapat digunakan saat Anda berada di area kampus UMS.");
         return;
@@ -235,6 +277,8 @@ async function createRoute(destLat, destLon, destName) {
                 }
             });
 
+            currentRouteLine = routeGeoJSON;
+
             const coordinates = routeGeoJSON.coordinates;
             const bounds = coordinates.reduce((bounds, coord) => {
                 return bounds.extend(coord);
@@ -274,17 +318,18 @@ function handleRouteRequest(lat, lon, nama) {
 }
 
 // ===============================================
-// Logika Lokasi Pengguna (Tidak berubah)
+// Logika Lokasi Pengguna
 // ===============================================
 const geolocate = new maplibregl.GeolocateControl({
     positionOptions: {
         enableHighAccuracy: true
     },
-    trackUserLocation: true, 
-    showUserHeading: true    
+    trackUserLocation: true,
+    showUserLocation: false,
+    showUserHeading: true
 });
 
-map.addControl(geolocate, 'bottom-right');
+map.addControl(geolocate, 'bottom-left');
 
 geolocate.on('geolocate', onLocationFound);
 geolocate.on('error', onLocationError);
@@ -302,9 +347,41 @@ function onLocationFound(e) {
     const userLng = e.coords.longitude;
     const userLat = e.coords.latitude;
     
-    userLocation = [userLng, userLat];
+    // Simpan lokasi GPS MENTAH
+    const rawUserLocation = [userLng, userLat];
     
-    const userLngLat = new maplibregl.LngLat(userLng, userLat);
+    // Tentukan lokasi final untuk marker
+    let finalLocation;
+
+    // --- Logika Snap-to-Road ---
+    if (isNavigating && currentRouteLine && isSnapToRoadActive) {
+        // 1. Buat 'Point' Turf dari lokasi mentah
+        const userPoint = turf.point(rawUserLocation);
+        
+        // 2. Temukan titik terdekat PADA GARIS RUTE
+        const snappedResult = turf.pointOnLine(currentRouteLine, userPoint);
+        
+        // 3. Ambil koordinat [lng, lat] dari hasil
+        finalLocation = snappedResult.geometry.coordinates;
+
+    } else {
+        // Jika tidak navigasi, gunakan lokasi mentah
+        finalLocation = rawUserLocation;
+    }
+
+    // Gunakan 'finalLocation' untuk semua hal di bawah ini
+    userLocation = finalLocation; // Update variabel global
+
+    if (!userMarker) {
+        const markerEl = buildUserMarker();
+        userMarker = new maplibregl.Marker({element: markerEl, anchor: 'center'})
+            .setLngLat(userLocation) // <-- Gunakan 'userLocation' (yang sudah di-snap)
+            .addTo(map);
+    } else {
+        userMarker.setLngLat(userLocation); // <-- Gunakan 'userLocation' (yang sudah di-snap)
+    }
+    
+    const userLngLat = new maplibregl.LngLat(userLocation[0], userLocation[1]);
 
     if (isUserOnCampus(userLngLat)) {
         isUserOnCampusFlag = true;
@@ -408,7 +485,7 @@ searchInput.addEventListener('keyup', function(e) {
     const searchTerm = e.target.value.toLowerCase();
     const items = allLocationsList.getElementsByClassName('location-item');
     Array.from(items).forEach(item => {
-        const namaLokasi = item.dataset.nama;
+        const namaLokasi = item.dataset.nama.toLowerCase();
         if (namaLokasi.includes(searchTerm)) {
             item.style.display = 'flex';
         } else {
@@ -419,14 +496,15 @@ searchInput.addEventListener('keyup', function(e) {
 
 
 // ===============================================
-// BARU: Fungsi untuk Masuk ke Mode Navigasi
+// Fungsi untuk Masuk ke Mode Navigasi (Tidak berubah)
 // ===============================================
 function startNavigationMode() {
     // 1. Set status & Sembunyikan/Tampilkan tombol
     isNavigating = true;
-    wasNavigating = false; // BARU: Reset flag 'wasNavigating'
+    wasNavigating = false; 
     startNavBtn.style.display = 'none';
     cancelNavBtn.style.display = 'flex';
+    snapToRoadBtn.style.display = 'flex';
     
     // 2. Pastikan kita punya lokasi pengguna
     if (userLocation) {
@@ -460,17 +538,19 @@ function startNavigationMode() {
 }
 
 // ===============================================
-// BARU: Fungsi untuk Membatalkan/Menghentikan Navigasi
+// Fungsi untuk Membatalkan/Menghentikan Navigasi (Tidak berubah)
 // ===============================================
 function cancelNavigationMode() {
     isNavigating = false;
-    wasNavigating = false; // BARU: Reset flag 'wasNavigating'
+    wasNavigating = false; 
     clearTimeout(snapBackTimer);
     snapBackTimer = null;
+    currentRouteLine = null;
 
     // 1. Sembunyikan tombol
     startNavBtn.style.display = 'none'; // Tetap sembunyi
     cancelNavBtn.style.display = 'none';
+    snapToRoadBtn.style.display = 'none';
 
     // 2. Hapus rute dari peta
     if (map.getLayer('route')) {
@@ -496,22 +576,45 @@ function cancelNavigationMode() {
     });
 }
 
+// ===============================================
+// Fungsi untuk Toggle Snap to Road
+// ===============================================
+function toggleSnapToRoad() {
+    // Balik statusnya
+    isSnapToRoadActive = !isSnapToRoadActive;
+    console.log("Status Snap to Road:", isSnapToRoadActive);
+
+    // Perbarui tampilan tombol
+    if (isSnapToRoadActive) {
+        snapToRoadBtn.classList.remove('bg-gray-500');
+        snapToRoadBtn.classList.add('bg-blue-500'); // Biru saat aktif
+        snapToRoadBtn.setAttribute('title', 'Snap to Road (Aktif)');
+    } else {
+        snapToRoadBtn.classList.remove('bg-blue-500');
+        snapToRoadBtn.classList.add('bg-gray-500'); // Abu-abu saat nonaktif
+        snapToRoadBtn.setAttribute('title', 'Snap to Road (Nonaktif)');
+    }
+}
+
+
 
 // ===============================================
-// Logika Tombol "Mulai Navigasi" (DISEDERHANAKAN)
+// Logika Tombol "Mulai Navigasi"
 // ===============================================
 startNavBtn.addEventListener('click', startNavigationMode);
 
 
 // ===============================================
-// Logika Tombol "Batal Navigasi" (DISEDERHANAKAN)
+// Logika Tombol "Batal Navigasi"
 // ===============================================
 cancelNavBtn.addEventListener('click', cancelNavigationMode);
 
 
 // ===============================================
-// BARU: Logika "Snap Back"
+// Logika "Snap Back"
 // ===============================================
+snapToRoadBtn.addEventListener('click', toggleSnapToRoad);
+
 
 // 1. Saat pengguna mulai interaksi, batalkan navigasi & timer
 function interruptNavigation() {
@@ -520,31 +623,46 @@ function interruptNavigation() {
     if (isNavigating) {
         console.log('User interrupted navigation.');
         isNavigating = false;
-        wasNavigating = true; // BARU: Tandai bahwa kita BARU SAJA menginterupsi
+        wasNavigating = true; 
         
         // Matikan mode 'follow & heading' (state 3) kembali ke 'follow' (state 2)
         if (geolocate._controlButton && geolocate._watchState === 3) {
             geolocate._controlButton.click();
         }
+        startNavBtn.style.display = 'none';
     }
 
-    // Sembunyikan tombol saat menggeser
-    startNavBtn.style.display = 'none';
-    cancelNavBtn.style.display = 'none';
 }
+
+// ===============================================
+// BARU: Listener untuk Tombol Locate
+// ===============================================
+locateButton.addEventListener('click', () => {
+    if (userLocation) {
+        // Jika lokasi sudah ditemukan, terbang ke sana
+        map.flyTo({
+            center: userLocation,
+            zoom: 19,
+            pitch: 60 // Selalu miringkan saat berpusat
+        });
+    } else {
+        // Jika lokasi belum ada, picu pencarian
+        geolocate.trigger();
+    }
+});
 
 // 2. Saat pengguna selesai, mulai timer
 function startSnapBackTimer() {
     clearTimeout(snapBackTimer);
     
-    // DIUBAH: Cek 'wasNavigating', BUKAN 'map.getSource('route')'
     if (wasNavigating && map.getSource('route')) {
         console.log('User stopped. Starting 4-second snap-back timer...');
+        cancelNavBtn.style.display = 'flex';
+        snapToRoadBtn.style.display = 'flex';
         snapBackTimer = setTimeout(() => {
-            // Setelah 4 detik, panggil fungsi 'Mulai Navigasi' lagi
             console.log('Timer finished. Snapping back to navigation.');
             startNavigationMode();
-        }, 4000); // 4000 milidetik = 4 detik
+        }, 4000); 
     }
 }
 
@@ -556,7 +674,174 @@ map.on('dragend', startSnapBackTimer);
 map.on('zoomend', startSnapBackTimer);
 
 
-// Perbaikan Bug Render Peta (Sama)
+// ===============================================
+// BARU: Logika Kompas UI
+// ===============================================
+
+/**
+ * Memperbarui teks derajat pada UI
+ */
+function updateRealCompassDegree(degrees) { 
+    if (degreeIndicator) {
+        const roundedDegrees = Math.round(degrees);
+        degreeIndicator.textContent = `${roundedDegrees}°`;
+    }
+}
+
+/**
+ * Menghitung dan menerapkan rotasi ke jarum kompas UI
+ * Ini dipanggil oleh handleMapOrientation (saat device bergerak)
+ * dan oleh map.on('rotate') (saat peta bergerak)
+ */
+
+// function updateCompassRotation() {
+//     if (!compassNeedle) return;
+
+//     // Dapatkan bearing peta (seberapa jauh peta diputar)
+//     const mapHeading = map.getBearing() || 0;
+    
+//     // 'lastCompassAlpha' adalah heading absolut perangkat (0-360, 0=Utara)
+//     // Kita ingin jarum menunjuk ke 'N' perangkat, relatif terhadap rotasi peta.
+//     const targetNeedleHeading = lastCompassAlpha - mapHeading;
+    
+//     // Terapkan smoothing agar pergerakan jarum tidak patah-patah
+//     let needleDelta = targetNeedleHeading - correctedNeedleHeading;
+//     if (needleDelta > 180) { needleDelta -= 360; } else if (needleDelta < -180) { needleDelta += 360; }
+    
+//     correctedNeedleHeading += needleDelta * smoothingFactor;
+    
+//     // Terapkan rotasi
+//     compassNeedle.style.transform = `rotate(${correctedNeedleHeading}deg)`;
+// }
+
+function updateCompassRotation() {
+    const mapHeading = map.getBearing() || 0;
+
+    // Bagian 1: Update Jarum Kompas UI (Absolute Heading)
+    if (compassNeedle) {
+        // Target adalah heading absolut perangkat
+        const targetNeedleHeading = lastCompassAlpha; 
+        
+        let needleDelta = targetNeedleHeading - correctedNeedleHeading;
+        if (needleDelta > 180) { needleDelta -= 360; } else if (needleDelta < -180) { needleDelta += 360; }
+        correctedNeedleHeading += needleDelta * smoothingFactor;
+        
+        compassNeedle.style.transform = `rotate(${correctedNeedleHeading}deg)`;
+    }
+
+    // Bagian 2: Update Kerucut Marker Pengguna (Relative to Map)
+    if (userMarker) {
+        // Target adalah heading absolut dikurangi rotasi peta
+        const targetConeHeading = lastCompassAlpha - mapHeading; 
+        
+        let coneDelta = targetConeHeading - correctedConeHeading;
+        if (coneDelta > 180) { coneDelta -= 360; } else if (coneDelta < -180) { coneDelta += 360; }
+        correctedConeHeading += coneDelta * smoothingFactor;
+
+        // Dapatkan elemen HTML dari marker
+        const markerEl = userMarker.getElement();
+        const headingEl = markerEl.querySelector('.user-location-heading');
+        if (headingEl) {
+            headingEl.style.transform = `translate(-50%, -50%) rotate(${correctedConeHeading}deg)`;
+        }
+    }
+}
+
+// Alternatif lama tanpa memperhitungkan rotasi peta
+// function updateCompassRotation() {
+//     if (!compassNeedle) return;
+
+//     // 'lastCompassAlpha' adalah heading absolut perangkat (0-360, 0=Utara)
+//     // Kita ingin jarum menunjuk ke heading absolut perangkat, sama seperti angkanya.
+//     const targetNeedleHeading = lastCompassAlpha;
+    
+//     // Terapkan smoothing agar pergerakan jarum tidak patah-patah
+//     let needleDelta = targetNeedleHeading - correctedNeedleHeading;
+    
+//     // Koreksi untuk putaran (misal: dari 350° ke 10°)
+//     if (needleDelta > 180) { 
+//         needleDelta -= 360; 
+//     } else if (needleDelta < -180) { 
+//         needleDelta += 360; 
+//     }
+    
+//     correctedNeedleHeading += needleDelta * smoothingFactor;
+    
+//     // Terapkan rotasi
+//     compassNeedle.style.transform = `rotate(${correctedNeedleHeading}deg)`;
+    
+//     // CATATAN: 'map.getBearing()' sengaja tidak digunakan di sini.
+//     // Listener 'map.on('rotate', updateCompassRotation)'
+//     // sekarang hanya berfungsi untuk 'memaksa' jarum kompas menghitung ulang
+//     // posisinya (menggunakan 'lastCompassAlpha' yang terbaru) saat peta bergerak,
+//     // BUKAN untuk mengubah perhitungan itu sendiri.
+// }
+
+/**
+ * Handler untuk event orientasi perangkat.
+ * Ini adalah sumber data untuk heading perangkat.
+ */
+function handleMapOrientation(event) {
+    let alpha = event.webkitCompassHeading || event.alpha;
+    if (alpha == null) return;
+    
+    // (360 - alpha) mengonversi dari 'device north' (0=N)
+    const correctedAlpha = (360 - alpha) % 360;
+    
+    // Smooth 'alpha' untuk mengurangi getaran
+    if (smoothedAlpha === null) {
+        smoothedAlpha = correctedAlpha;
+    } else {
+        let diff = correctedAlpha - smoothedAlpha;
+        if (diff > 180) { diff -= 360; }
+        if (diff < -180) { diff += 360; }
+        smoothedAlpha += diff * smoothingFactor;
+        smoothedAlpha = (smoothedAlpha % 360 + 360) % 360; // Normalisasi
+    }
+    
+    lastCompassAlpha = smoothedAlpha; 
+    updateRealCompassDegree(smoothedAlpha);
+    
+    // Tampilkan elemen kompas jika masih tersembunyi
+    if (compassIndicator && compassIndicator.style.display === 'none') {
+        compassIndicator.style.display = 'flex';
+    }
+    if (degreeIndicator && degreeIndicator.style.display === 'none') {
+        degreeIndicator.style.display = 'flex';
+    }
+    
+    // Panggil update rotasi untuk menerapkan heading baru
+    updateCompassRotation();
+}
+
+/**
+ * Mulai mendengarkan event orientasi perangkat
+ */
+function startMapOrientationListener() {
+    if (window.DeviceOrientationEvent) {
+        try {
+            // 'deviceorientationabsolute' lebih disukai karena tidak terpengaruh oleh orientasi layar
+            window.addEventListener('deviceorientationabsolute', handleMapOrientation, true);
+        } catch (e) {
+            // Fallback jika 'absolute' tidak tersedia
+            window.addEventListener('deviceorientation', handleMapOrientation, true);
+        }
+    }
+}
+
+/**
+ * Hentikan listener (jika diperlukan)
+ */
+function stopMapOrientationListener() {
+    window.removeEventListener('deviceorientationabsolute', handleMapOrientation, true);
+    window.removeEventListener('deviceorientation', handleMapOrientation, true);
+}
+
+// ===============================================
+// Lain-lain (Tidak berubah)
+// ===============================================
+
+// Perbaikan Bug Render Peta
 setTimeout(function() {
     map.resize();
 }, 500);
