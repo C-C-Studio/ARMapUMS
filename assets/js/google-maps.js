@@ -671,7 +671,6 @@ async function initMap() {
     }
 
 
-
     function initARRenderer() {
         if (arInitialized) return;
         arInitialized = true;
@@ -775,6 +774,8 @@ async function initMap() {
         // matrix pose dari hit-test (reticle)
         const mat = new THREE.Matrix4().fromArray(originPose.transform.matrix);
 
+        // blink params
+        const blinkSpeed = 3.0; // frekuensi kedip (Hz) - tweak jika perlu
         for (let i = 1; i <= numSpheres; i++) {
             const distance = i * stepDistance;
 
@@ -782,15 +783,25 @@ async function initMap() {
             const localPos = new THREE.Vector3(0, 0, -distance);
             const worldPos = localPos.clone().applyMatrix4(mat);
 
-            const sphereGeo = new THREE.SphereGeometry(0.1, 16, 16);
+            const sphereGeo = new THREE.SphereGeometry(0.12, 16, 16);
+
+            // material yang mendukung opacity untuk blink
             const sphereMat = new THREE.MeshBasicMaterial({
                 color: 0x00aaff,
                 transparent: true,
-                opacity: 0.9
+                opacity: 1.0, // initial, akan di-animate
+                depthTest: true,
+                depthWrite: false
             });
+
             const sphere = new THREE.Mesh(sphereGeo, sphereMat);
 
+            // set posisi
             sphere.position.copy(worldPos);
+
+            // simpan userData untuk animasi (phase/offset supaya blinking tidak sinkron)
+            sphere.userData.blinkOffset = (i % 2 === 0) ? Math.PI : 0; // bergantian: even/odd phase
+            sphere.userData.blinkSpeed = blinkSpeed;
 
             arScene.add(sphere);
             arNavSpheres.push(sphere);
@@ -799,10 +810,29 @@ async function initMap() {
 
 
 
+
     function clearNavigationSpheres() {
-        arNavSpheres.forEach(s => arScene.remove(s));
+        arNavSpheres.forEach(s => {
+            try {
+                if (s.geometry) {
+                    s.geometry.dispose();
+                }
+                if (s.material) {
+                    // jika material merupakan array atau multi-material, dispose semua
+                    if (Array.isArray(s.material)) {
+                        s.material.forEach(m => { if (m.dispose) m.dispose(); });
+                    } else {
+                        if (s.material.dispose) s.material.dispose();
+                    }
+                }
+                arScene.remove(s);
+            } catch (e) {
+                console.warn('Error disposing sphere', e);
+            }
+        });
         arNavSpheres = [];
     }
+
 
     function onARFrame(time, frame) {
         const session = arRenderer.xr.getSession();
@@ -921,6 +951,31 @@ async function initMap() {
                     if (arScanningText) arScanningText.style.display = 'flex';
                 }
             }
+        }
+        // ----------------------
+        // Animasi blinking spheres
+        // ----------------------
+        try {
+            // time dalam milidetik dari WebXR frame callback -> convert ke detik
+            const tSec = (typeof time === 'number') ? (time / 1000) : performance.now() / 1000;
+
+            // jika ada sphere, update opacity
+            if (arNavSpheres && arNavSpheres.length > 0) {
+                for (let i = 0; i < arNavSpheres.length; i++) {
+                    const s = arNavSpheres[i];
+                    if (!s || !s.material) continue;
+
+                    const speed = s.userData.blinkSpeed || 2.5;
+                    const offset = s.userData.blinkOffset || 0;
+                    // sin wave antara 0..1
+                    const alpha = 0.5 + 0.5 * Math.sin(tSec * Math.PI * 2 * speed + offset);
+                    // optional: ramp minimum visibility (so it never fully disappears)
+                    const minAlpha = 0.25;
+                    s.material.opacity = Math.max(minAlpha, alpha);
+                }
+            }
+        } catch (e) {
+            console.warn('Blink update error', e);
         }
 
         arRenderer.render(arScene, arCamera);
