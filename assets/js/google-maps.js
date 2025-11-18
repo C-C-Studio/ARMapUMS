@@ -600,12 +600,25 @@ async function initMap() {
     ];
     let arCurrentStep = 0;
     let arTargetHeading = 0;          // akan diisi dari rute
-    const AR_ANGLE_THRESHOLD = 5;   // boleh ±45°
-    const AR_HYSTERESIS_ANGLE = 90;  // jarak sebelum dianggap "lari jauh"
-    const LOST_FRAMES_THRESHOLD = 9999; // praktis: tidak auto-hapus
+    // const AR_ANGLE_THRESHOLD = 5;   // boleh ±45°
+    // const AR_HYSTERESIS_ANGLE = 90;  // jarak sebelum dianggap "lari jauh"
+    // const LOST_FRAMES_THRESHOLD = 9999; // praktis: tidak auto-hapus
+    // let arSphereSpawned = false;
+    // let arSphereTravelled = false;
+    // let arLostHeadingFrames = 0;
+    // const HORIZONTAL_ANGLE_THRESHOLD = 25;
+
+    const AR_ANGLE_THRESHOLD = 35;    // toleransi ±35° untuk trigger spawn (atur 30-45 saat tuning)
+    const AR_HYSTERESIS_ANGLE = 90;
+    const LOST_FRAMES_THRESHOLD = 9999; // tidak auto-hapus (saat ini)
     let arSphereSpawned = false;
     let arSphereTravelled = false;
     let arLostHeadingFrames = 0;
+
+    // Ground detection threshold & smoothing untuk angleDeg
+    const HORIZONTAL_ANGLE_THRESHOLD = 25; // <=25° dianggap horizontal
+    let smoothedPlaneAngle = null;
+    const planeSmoothingFactor = 0.2; // 0..1, lebih besar = lebih responsif
 
     function shortestAngleDiff(a, b) {
         let diff = a - b;
@@ -618,10 +631,18 @@ async function initMap() {
     function computeBearing(fromLatLng, toLatLng) {
         if (!fromLatLng || !toLatLng) return null;
 
-        const lat1 = fromLatLng.lat() * Math.PI / 180;
-        const lon1 = fromLatLng.lng() * Math.PI / 180;
-        const lat2 = toLatLng.lat() * Math.PI / 180;
-        const lon2 = toLatLng.lng() * Math.PI / 180;
+        // support google.maps.LatLng (with .lat()/.lng()) and LatLngLiteral {lat, lng}
+        const latA = (typeof fromLatLng.lat === 'function') ? fromLatLng.lat() : fromLatLng.lat;
+        const lonA = (typeof fromLatLng.lng === 'function') ? fromLatLng.lng() : fromLatLng.lng;
+        const latB = (typeof toLatLng.lat === 'function') ? toLatLng.lat() : toLatLng.lat;
+        const lonB = (typeof toLatLng.lng === 'function') ? toLatLng.lng() : toLatLng.lng;
+
+        if (latA == null || lonA == null || latB == null || lonB == null) return null;
+
+        const lat1 = latA * Math.PI / 180;
+        const lon1 = lonA * Math.PI / 180;
+        const lat2 = latB * Math.PI / 180;
+        const lon2 = lonB * Math.PI / 180;
 
         const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
         const x =
@@ -629,8 +650,9 @@ async function initMap() {
             Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
 
         const brng = Math.atan2(y, x) * 180 / Math.PI;
-        return (brng + 360) % 360; // normalisasi 0–360
+        return (brng + 360) % 360;
     }
+
 
     // Ambil heading navigasi saat ini dari rute (arah dari posisi user ke tujuan)
     function getNavHeadingFromRoute() {
@@ -665,13 +687,21 @@ async function initMap() {
         arScene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
         arScene.add(arCamera);
 
-        // reticle (lingkaran hijau di lantai)
         const ringGeo = new THREE.RingGeometry(0.1, 0.11, 32).rotateX(-Math.PI / 2);
-        const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-        arReticle = new THREE.Mesh(ringGeo, ringMat);
+
+        // dua material: hijau = valid ground, merah = invalid
+        const ringMatValid = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const ringMatInvalid = new THREE.MeshBasicMaterial({ color: 0xff4444 });
+
+        arReticle = new THREE.Mesh(ringGeo, ringMatInvalid); // default merah (invalid)
         arReticle.matrixAutoUpdate = false;
         arReticle.visible = false;
         arScene.add(arReticle);
+
+        // simpan referensi material agar mudah diganti saat deteksi
+        arReticle._matValid = ringMatValid;
+        arReticle._matInvalid = ringMatInvalid;
+
 
         arContainer.appendChild(arRenderer.domElement);
 
@@ -781,15 +811,59 @@ async function initMap() {
         if (frame && arHitTestSource && arLocalSpace) {
             const hitTestResults = frame.getHitTestResults(arHitTestSource);
             if (hitTestResults.length > 0) {
-                const hit = hitTestResults[0];
-                const pose = hit.getPose(arLocalSpace);
+            const hit = hitTestResults[0];
+            const pose = hit.getPose(arLocalSpace);
+
+            // --- EXTRACT ROTATION & COMPUTE NORMAL (Three.js) ---
+            const poseMat = new THREE.Matrix4().fromArray(pose.transform.matrix);
+            const rotMat = new THREE.Matrix4().extractRotation(poseMat);
+
+            // normal permukaan menurut pose (transform vektor "up" lokal)
+            const normal = new THREE.Vector3(0, 1, 0).applyMatrix4(rotMat).normalize();
+            const worldUp = new THREE.Vector3(0, 1, 0);
+
+            // sudut (radian -> derajat) antara normal dan worldUp
+            const angleDeg = normal.angleTo(worldUp) * 180 / Math.PI;
+
+            // debug: tampilkan angle di console (hapus/comment jika tidak perlu)
+            // smoothing kecil agar angleDeg tidak melompat-lompat
+            if (smoothedPlaneAngle === null) smoothedPlaneAngle = angleDeg;
+            else smoothedPlaneAngle = smoothedPlaneAngle * (1 - planeSmoothingFactor) + angleDeg * planeSmoothingFactor;
+
+            const displayAngle = smoothedPlaneAngle;
+            const isGroundPlane = displayAngle <= HORIZONTAL_ANGLE_THRESHOLD;
+
+            // debug terpusat
+            console.log({
+            planeRaw: angleDeg.toFixed(1),
+            planeSmoothed: displayAngle.toFixed(1),
+            isGroundPlane
+            });
+
+            // update reticle: pos & warna / visibilitas sesuai validitas
+            if (isGroundPlane) {
                 arReticle.visible = true;
+                arReticle.material = arReticle._matValid; // hijau
                 arReticle.matrix.fromArray(pose.transform.matrix);
 
                 if (!arSurfaceDetected) {
                     arSurfaceDetected = true;
                     if (arScanningText) arScanningText.style.display = 'none';
                 }
+            } else {
+                // plane bukan ground (mungkin dinding) -> reticle merah atau sembunyikan
+                // jika mau tunjukkan reticle merah, uncomment baris di bawah; 
+                // untuk UX lebih aman, kita sembunyikan reticle
+                arReticle.visible = false;
+                // arReticle.visible = true;
+                // arReticle.material = arReticle._matInvalid;
+                // arReticle.matrix.fromArray(pose.transform.matrix);
+                
+                if (arSurfaceDetected) {
+                    arSurfaceDetected = false;
+                    if (arScanningText) arScanningText.style.display = 'flex';
+                }
+            }
 
                 // logika spawn bola ketika heading cocok
                 // === LOGIKA SPAWN BOLA BERDASARKAN ARAH NAVIGASI ===
@@ -816,48 +890,25 @@ async function initMap() {
                     // DEBUG (sementara, boleh dihapus nanti)
                     // console.log('AR headingNow =', headingNow, 'navHeading =', navHeading);
 
-                    if (headingNow != null && navHeading != null) {
-                        // update target heading AR supaya sama dengan arah rute
+                    // sebelum spawn, pastikan reticle valid & ground
+                    if (isGroundPlane && arReticle.visible) {
                         arTargetHeading = navHeading;
-
                         const angDiff = shortestAngleDiff(headingNow, arTargetHeading);
-                        // console.log('angDiff =', angDiff);
+                        console.log('AR debug:', { headingNow, navHeading, angDiff: angDiff.toFixed(1), arReticleVisible: arReticle.visible });
 
-                        // 🟦 Spawn bola biru hanya kalau arah user ≈ arah navigasi
                         if (!arSphereSpawned && angDiff <= AR_ANGLE_THRESHOLD) {
-                            console.log('🔵 Spawn bola biru, angDiff =', angDiff);
+                            console.log('🔵 Spawn bola biru, angDiff =', angDiff.toFixed(1));
                             addNavigationSpheres(pose);
                             arSphereSpawned = true;
                             arSphereTravelled = false;
                             arLostHeadingFrames = 0;
                         }
-
-                        // if (arSphereSpawned) {
-                        //     const exitThreshold = AR_ANGLE_THRESHOLD + AR_HYSTERESIS_ANGLE;
-
-                        //     if (angDiff > exitThreshold) {
-                        //         arLostHeadingFrames++;     // user menjauh dari arah rute
-                        //     } else {
-                        //         arLostHeadingFrames = 0;
-                        //     }
-
-                        //     if (arLostHeadingFrames >= LOST_FRAMES_THRESHOLD) {
-                        //         console.log('❌ Hapus bola biru, angDiff terlalu besar =', angDiff);
-                        //         clearNavigationSpheres();
-                        //         arSphereSpawned = false;
-                        //         arLostHeadingFrames = 0;
-                        //     }
-                        // }
                     } else {
-                        // tidak punya heading kompas / heading rute → jangan paksa
-                        if (arSphereSpawned) {
-                            console.log('❌ Hapus bola biru, headingNow/navHeading null');
-                        }
-                        clearNavigationSpheres();
-                        arSphereSpawned = false;
-                        arSphereTravelled = false;
-                        arLostHeadingFrames = 0;
+                        // opsional: log kenapa tidak spawn
+                        if (!isGroundPlane) console.log('spawn skip: plane bukan ground (angle > threshold)');
+                        if (!arReticle.visible) console.log('spawn skip: reticle tidak terlihat');
                     }
+
                 }
 
 
