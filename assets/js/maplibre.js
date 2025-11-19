@@ -355,16 +355,12 @@ function onLocationFound(e) {
 
     // --- Logika Snap-to-Road ---
     if ((isNavigating || wasNavigating) && currentRouteLine && isSnapToRoadActive) {
-        
         // 1. Buat 'Point' Turf dari lokasi mentah
         const userPoint = turf.point(rawUserLocation);
-        
         // 2. Temukan titik terdekat PADA GARIS RUTE
         const snappedResult = turf.pointOnLine(currentRouteLine, userPoint);
-        
         // 3. Ambil koordinat [lng, lat] dari hasil
         finalLocation = snappedResult.geometry.coordinates;
-
     } else {
         // Jika tidak navigasi, gunakan lokasi mentah
         finalLocation = rawUserLocation;
@@ -385,10 +381,10 @@ function onLocationFound(e) {
     if (isNavigating && !wasNavigating) {
         map.easeTo({
             center: userLocation,
+            bearing: lastCompassAlpha || 0, // Arahkan sesuai heading perangkat
             duration: 1000, // Durasi animasi (sesuaikan dengan interval GPS, biasanya 1 detik)
             easing: n => n, // Linear easing agar pergerakan halus
-            pitch: 60,      // Pertahankan kemiringan kamera
-            // bearing: ... (Opsional: jika Anda ingin peta berputar sesuai arah jalan)
+            pitch: 60      // Pertahankan kemiringan kamera
         });
     }
     
