@@ -114,7 +114,7 @@ function buildUserMarker() {
 map.on('load', () => {
     // 1. Muat Lokasi (Marker)
     fetch('assets/data/location.json')
-         .then(response => response.json())
+        .then(response => response.json())
         .then(data => {
             console.log("Data lokasi berhasil dimuat:", data);
             allLocationsData = data;
@@ -156,7 +156,7 @@ map.on('load', () => {
 
     // 2. Muat Jalur Kustom (GeoJSON)
     fetch('assets/data/path.json')
-         .then(response => response.json())
+        .then(response => response.json())
         .then(data => {
             console.log("Data jalur berhasil dimuat:", data);
             
@@ -354,7 +354,8 @@ function onLocationFound(e) {
     let finalLocation;
 
     // --- Logika Snap-to-Road ---
-    if (isNavigating && currentRouteLine && isSnapToRoadActive) {
+    if ((isNavigating || wasNavigating) && currentRouteLine && isSnapToRoadActive) {
+        
         // 1. Buat 'Point' Turf dari lokasi mentah
         const userPoint = turf.point(rawUserLocation);
         
@@ -379,6 +380,16 @@ function onLocationFound(e) {
             .addTo(map);
     } else {
         userMarker.setLngLat(userLocation); // <-- Gunakan 'userLocation' (yang sudah di-snap)
+    }
+
+    if (isNavigating && !wasNavigating) {
+        map.easeTo({
+            center: userLocation,
+            duration: 1000, // Durasi animasi (sesuaikan dengan interval GPS, biasanya 1 detik)
+            easing: n => n, // Linear easing agar pergerakan halus
+            pitch: 60,      // Pertahankan kemiringan kamera
+            // bearing: ... (Opsional: jika Anda ingin peta berputar sesuai arah jalan)
+        });
     }
     
     const userLngLat = new maplibregl.LngLat(userLocation[0], userLocation[1]);
