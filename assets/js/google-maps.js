@@ -7,7 +7,14 @@
 
 // Impor modul geofence dari file sebelah
 import { initGeofence, isUserOnCampus } from './geofence-google.js';
-import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+
+// THREE.js sebagai ES module (gunakan hanya satu import)
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+
+
+
 
 // 🔽 tambahkan ini
 const arMapOverlay = document.getElementById('ar-map-overlay');
@@ -374,6 +381,25 @@ async function initMap() {
         }
     }
 
+    // Haversine distance (meters)
+    function haversineDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371000; // m
+        const φ1 = lat1 * Math.PI/180;
+        const φ2 = lat2 * Math.PI/180;
+        const Δφ = (lat2-lat1)*Math.PI/180;
+        const Δλ = (lon2-lon1)*Math.PI/180;
+        const a = Math.sin(Δφ/2)*Math.sin(Δφ/2) + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)*Math.sin(Δλ/2);
+        const c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R*c;
+    }
+
+    function signedAngleDiff(a, b) {
+        // returns signed (a - b) normalized to [-180,180]
+        let diff = (a - b + 540) % 360 - 180;
+        return diff;
+    }
+
+
     function calculateAndDisplayRoute(origin, destination) { 
         const request = {
             origin: origin,
@@ -384,6 +410,68 @@ async function initMap() {
             .then((response) => {
                 directionsRenderer.setDirections(response);
                 // 🔽 gambar rute juga di mini map kalau sudah dibuat
+                // ---- parse route into points & segments for AR guidance ----
+                (function parseRouteForAR(resp) {
+                    try {
+                        routePoints = [];
+                        routeDistances = [];
+                        routeBearings = [];
+                        turnPoints = [];
+
+                        const route = resp.routes[0];
+                        if (!route) return;
+
+                        // collect all path points from legs -> steps -> path
+                        const legs = route.legs || [];
+                        for (const leg of legs) {
+                            for (const step of leg.steps || []) {
+                                for (const p of step.path || []) {
+                                    // p may be LatLng object or literal; normalize
+                                    const lat = (typeof p.lat === 'function') ? p.lat() : p.lat;
+                                    const lng = (typeof p.lng === 'function') ? p.lng() : p.lng;
+                                    routePoints.push({ lat, lng });
+                                }
+                            }
+                        }
+
+                        // compute cumulative distances and segment bearings
+                        let cum = 0;
+                        routeDistances = [0];
+                        for (let i = 0; i < routePoints.length - 1; i++) {
+                            const a = routePoints[i];
+                            const b = routePoints[i+1];
+                            const segDist = haversineDistance(a.lat, a.lng, b.lat, b.lng);
+                            cum += segDist;
+                            routeDistances.push(cum);
+
+                            const brng = computeBearing(a, b);
+                            routeBearings.push(brng);
+                        }
+
+                        // detect turns: compare bearing change between consecutive segments
+                        for (let i = 0; i < routeBearings.length - 1; i++) {
+                            const b1 = routeBearings[i];
+                            const b2 = routeBearings[i+1];
+                            const delta = signedAngleDiff(b2, b1); // signed diff
+                            if (Math.abs(delta) >= TURN_ANGLE_THRESHOLD) {
+                                // record turn at point index i+1 (between segment i and i+1)
+                                const turnIndex = i + 1;
+                                const turnDistance = routeDistances[turnIndex];
+                                turnPoints.push({
+                                    index: turnIndex,
+                                    distance: turnDistance,
+                                    bearing: b2,
+                                    turnAngle: delta
+                                });
+                            }
+                        }
+
+                        if (AR_DEBUG) console.log('Parsed route for AR:', { points: routePoints.length, turnPoints });
+                    } catch (e) {
+                        console.warn('parseRouteForAR failed', e);
+                    }
+                })(response);
+
                 if (arMiniDirectionsRenderer) {
                     arMiniDirectionsRenderer.setDirections(response);
                 }
@@ -420,7 +508,7 @@ async function initMap() {
 
         // Cek jika ada rute aktif, rute dijeda, atau rute tergambar di peta
         if (isNavigating || wasNavigating || (directionsRenderer.getDirections() && directionsRenderer.getDirections().routes.length > 0)) {
-            console.log('Rute lama dibatalkan untuk membuat rute baru.');
+            if (AR_DEBUG) console.log('Rute lama dibatalkan untuk membuat rute baru.');
             
             // 1. Hapus rute lama dari peta
             directionsRenderer.setDirections({ routes: [] }); 
@@ -454,7 +542,7 @@ async function initMap() {
             map.setTilt(60);
             map.setZoom(19);
             const idleListener = map.addListener('idle', () => {
-                console.log("Programmatic move (snap-back) finished. Resetting flag.");
+                if (AR_DEBUG) console.log("Programmatic move (snap-back) finished. Resetting flag.");
                 isProgrammaticMove = false;
                 idleListener.remove(); 
             });
@@ -477,12 +565,12 @@ async function initMap() {
     }
     function interruptNavigation() { 
         if (isProgrammaticMove) {
-            console.log("Ignoring programmatic move...");
+            if (AR_DEBUG) console.log("Ignoring programmatic move...");
             return; 
         }
         clearTimeout(snapBackTimer);
         if (isNavigating) {
-            console.log('User interrupted navigation.');
+            if (AR_DEBUG) console.log('User interrupted navigation.');
             isNavigating = false;
             wasNavigating = true; 
         }
@@ -496,10 +584,10 @@ async function initMap() {
         }
         clearTimeout(snapBackTimer);
         if (wasNavigating && directionsRenderer.getDirections()?.routes.length > 0) {
-            console.log('User stopped. Starting 4-second snap-back timer...');
+            if (AR_DEBUG) console.log('User stopped. Starting 4-second snap-back timer...');
             cancelNavButton.style.display = 'flex';
             snapBackTimer = setTimeout(() => {
-                console.log('Timer finished. Snapping back to navigation.');
+                if (AR_DEBUG) console.log('Timer finished. Snapping back to navigation.');
                 startNavigationMode(); 
             }, 4000); 
         } else {
@@ -608,6 +696,8 @@ async function initMap() {
     // let arLostHeadingFrames = 0;
     // const HORIZONTAL_ANGLE_THRESHOLD = 25;
 
+    const AR_DEBUG = true; // set false in production
+
     const AR_ANGLE_THRESHOLD = 35;    // toleransi ±35° untuk trigger spawn (atur 30-45 saat tuning)
     const AR_HYSTERESIS_ANGLE = 90;
     const LOST_FRAMES_THRESHOLD = 9999; // tidak auto-hapus (saat ini)
@@ -619,6 +709,40 @@ async function initMap() {
     const HORIZONTAL_ANGLE_THRESHOLD = 25; // <=25° dianggap horizontal
     let smoothedPlaneAngle = null;
     const planeSmoothingFactor = 0.2; // 0..1, lebih besar = lebih responsif
+
+
+    // GUIDANCE config
+    const SPHERE_SPACING = 1.0;           // meter antar bola
+    const SPHERE_COUNT_MAX = 20;         // limit maksimum bola yang di-spawn
+    const TURN_ANGLE_THRESHOLD = 30;     // derajat perubahan heading untuk deteksi belokan
+    const AR_ARROW_SPAWN_DISTANCE = 6.0; // spawn arrow ketika jarak ke belokan <= 6m (sesuaikan)
+    const AR_ARROW_MODEL_URL = 'https://raw.githubusercontent.com/C-C-Studio/ARMapUMS/main/assets/3DModel/direction_arrow.glb?raw=1';
+
+    // route parsed data
+    let routePoints = [];      // [{lat, lng}] sampled from directions
+    let routeDistances = [];   // cumulative distance along route (meters)
+    let routeBearings = [];    // bearing of each segment (degrees)
+    let turnPoints = [];       // indices or distances where turn happens [{index, distance, bearing, turnAngle}]
+
+    const gltfLoader = new GLTFLoader();
+    let arrowGltfScene = null;
+    let arrowModelLoaded = false;
+
+    function loadArrowModel() {
+        if (arrowModelLoaded) return Promise.resolve(arrowGltfScene.clone());
+        return new Promise((resolve, reject) => {
+            gltfLoader.load(AR_ARROW_MODEL_URL, (gltf) => {
+                arrowGltfScene = gltf.scene;
+                arrowModelLoaded = true;
+                resolve(arrowGltfScene.clone());
+            }, undefined, (err) => {
+                console.error('Failed load arrow GLB', err);
+                reject(err);
+            });
+        });
+    }
+ 
+
 
     function shortestAngleDiff(a, b) {
         let diff = a - b;
@@ -808,23 +932,95 @@ async function initMap() {
         }
     }
 
+    // spawn spheres in front up to distanceMeters (uses originPose)
+    function spawnSpheresInFront(originPose, distanceMeters) {
+        // compute count
+        const count = Math.min(Math.ceil(distanceMeters / SPHERE_SPACING), SPHERE_COUNT_MAX);
+        // reuse addNavigationSpheres style but spawn count-based
+        // matrix from pose
+        const mat = new THREE.Matrix4().fromArray(originPose.transform.matrix);
+        for (let i = 1; i <= count; i++) {
+            const d = i * SPHERE_SPACING;
+            const localPos = new THREE.Vector3(0, 0, -d);
+            const worldPos = localPos.clone().applyMatrix4(mat);
+
+            const sphereGeo = new THREE.SphereGeometry(0.12, 16, 16);
+            const sphereMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 1.0, depthTest: true, depthWrite: false });
+
+            const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+            sphere.position.copy(worldPos);
+            // blinking phase offset for alternation
+            sphere.userData.blinkOffset = (i % 2 === 0) ? Math.PI : 0;
+            sphere.userData.blinkSpeed = 2.5;
+
+            arScene.add(sphere);
+            arNavSpheres.push(sphere);
+        }
+    }
+
+    // spawn arrow model in front at distanceMeters, rotated to show left/right/straight
+    async function spawnTurnArrow(originPose, turn) {
+        try {
+            const arrow = await loadArrowModel();
+            // arrow is a Scene/group clone already returned by loader
+            const arrowRoot = arrow;
+            arrowRoot.userData = arrowRoot.userData || {};
+            arrowRoot.userData.isTurnArrow = true;
+            arrowRoot.userData.turnIndex = turn.index;
+
+            // compute position in front
+            const mat = new THREE.Matrix4().fromArray(originPose.transform.matrix);
+            const localPos = new THREE.Vector3(0, 0, -Math.min(AR_ARROW_SPAWN_DISTANCE, Math.max(2, turn.distance || AR_ARROW_SPAWN_DISTANCE)));
+            const worldPos = localPos.clone().applyMatrix4(mat);
+
+            arrowRoot.position.copy(worldPos);
+            arrowRoot.position.y += 0.05; // sedikit angkat supaya tidak clipping
+
+            // --- Orientasi arrow: lebih robust menggunakan lookAt ke world direction dari turn.bearing ---
+            // compute world direction vector for turnBearing (heading -> world dir)
+            const headingRad = (turn.bearing) * Math.PI / 180;
+            const dirVec = new THREE.Vector3(Math.sin(headingRad), 0, -Math.cos(headingRad));
+            const lookTarget = arrowRoot.position.clone().add(dirVec);
+            arrowRoot.lookAt(lookTarget);
+
+            // adjust scale / orientation if model axes mismatch
+            arrowRoot.scale.set(0.7, 0.7, 0.7);
+
+            // finally add to scene and list ONCE
+            arScene.add(arrowRoot);
+            arNavSpheres.push(arrowRoot);
+
+            if (AR_DEBUG) console.log('spawnTurnArrow: spawned arrow for turn', turn.index);
+        } catch (e) {
+            console.warn('spawnTurnArrow failed', e);
+        }
+    }
 
 
+    function disposeObject(obj) {
+        if (!obj) return;
+        // dispose recursively children first
+        if (obj.children && obj.children.length) {
+            obj.children.forEach(child => disposeObject(child));
+        }
+        if (obj.geometry) {
+            try { obj.geometry.dispose(); } catch (e) {}
+        }
+        if (obj.material) {
+            try {
+                if (Array.isArray(obj.material)) {
+                    obj.material.forEach(m => { if (m && m.dispose) m.dispose(); });
+                } else {
+                    if (obj.material.dispose) obj.material.dispose();
+                }
+            } catch (e) {}
+        }
+    }
 
     function clearNavigationSpheres() {
         arNavSpheres.forEach(s => {
             try {
-                if (s.geometry) {
-                    s.geometry.dispose();
-                }
-                if (s.material) {
-                    // jika material merupakan array atau multi-material, dispose semua
-                    if (Array.isArray(s.material)) {
-                        s.material.forEach(m => { if (m.dispose) m.dispose(); });
-                    } else {
-                        if (s.material.dispose) s.material.dispose();
-                    }
-                }
+                disposeObject(s);
                 arScene.remove(s);
             } catch (e) {
                 console.warn('Error disposing sphere', e);
@@ -832,6 +1028,7 @@ async function initMap() {
         });
         arNavSpheres = [];
     }
+
 
 
     function onARFrame(time, frame) {
@@ -912,31 +1109,83 @@ async function initMap() {
                     arSphereTravelled = false;
                     arLostHeadingFrames = 0;
                 } else {
-                    // heading kompas user (dari listener kompas)
-                    const headingNow = (window.__UMS_AR_HEADING ?? arHeading ?? null);
-                    // heading rute (dari Directions)
-                    const navHeading = getNavHeadingFromRoute();
 
                     // DEBUG (sementara, boleh dihapus nanti)
                     // console.log('AR headingNow =', headingNow, 'navHeading =', navHeading);
 
                     // sebelum spawn, pastikan reticle valid & ground
                     if (isGroundPlane && arReticle.visible) {
-                        arTargetHeading = navHeading;
-                        const angDiff = shortestAngleDiff(headingNow, arTargetHeading);
-                        console.log('AR debug:', { headingNow, navHeading, angDiff: angDiff.toFixed(1), arReticleVisible: arReticle.visible });
-
-                        if (!arSphereSpawned && angDiff <= AR_ANGLE_THRESHOLD) {
-                            console.log('🔵 Spawn bola biru, angDiff =', angDiff.toFixed(1));
-                            addNavigationSpheres(pose);
-                            arSphereSpawned = true;
-                            arSphereTravelled = false;
-                            arLostHeadingFrames = 0;
+                        // determine distance from user along route to next turn
+                        function distanceAlongRouteFromUser() {
+                            if (!routePoints.length || !userPosition) return null;
+                            // find nearest route point index to userPosition
+                            let nearestIdx = 0;
+                            let nearestDist = Infinity;
+                            for (let i = 0; i < routePoints.length; i++) {
+                                const p = routePoints[i];
+                                const d = haversineDistance(userPosition.lat(), userPosition.lng(), p.lat, p.lng);
+                                if (d < nearestDist) { nearestDist = d; nearestIdx = i; }
+                            }
+                            // compute distance from nearestIdx to next turn
+                            const userCumDist = (routeDistances[nearestIdx] || 0);
+                            let nextTurn = null;
+                            for (const t of turnPoints) {
+                                if (t.distance > userCumDist) { nextTurn = t; break; }
+                            }
+                            if (!nextTurn) return { nextTurn: null, distToNextTurn: null };
+                            const distToNextTurn = nextTurn.distance - userCumDist;
+                            return { nextTurn, distToNextTurn };
                         }
+
+                        // inside isGroundPlane && arReticle.visible
+                        const headingNow = (window.__UMS_AR_HEADING ?? arHeading ?? null);
+                        const navHeading = getNavHeadingFromRoute();
+
+                        if (headingNow != null && navHeading != null) {
+                            arTargetHeading = navHeading;
+                            const angDiff = shortestAngleDiff(headingNow, arTargetHeading);
+
+                            // compute distance to next turn
+                            const routeInfo = distanceAlongRouteFromUser();
+                            const distToNextTurn = routeInfo ? routeInfo.distToNextTurn : null;
+                            const nextTurn = routeInfo ? routeInfo.nextTurn : null;
+
+                            // decide how many spheres to spawn: spawn up to min(distToNextTurn, SPHERE_COUNT_MAX*SPHERE_SPACING)
+                            let spawnDist = distToNextTurn != null ? Math.min(distToNextTurn, SPHERE_COUNT_MAX * SPHERE_SPACING) : Math.min( SPHERE_COUNT_MAX * SPHERE_SPACING, 10);
+
+                            // if no upcoming turn detected, spawn default forward guidance
+                            if (!spawnDist || spawnDist <= 0) spawnDist = Math.min( SPHERE_COUNT_MAX * SPHERE_SPACING, 10 );
+
+                            // spawn spheres only once per AR activation, or when not spawned yet
+                            if (!arSphereSpawned && angDiff <= AR_ANGLE_THRESHOLD) {
+                                // clear old
+                                clearNavigationSpheres();
+                                // spawn spheres forward up to spawnDist
+                                spawnSpheresInFront(pose, spawnDist);
+                                arSphereSpawned = true;
+                                if (AR_DEBUG) console.log('spawned spheres for dist', spawnDist, 'm, distToNextTurn', distToNextTurn);
+                            }
+
+                            // spawn arrow when approaching turn and not already spawned arrow for that turn
+                            if (nextTurn && distToNextTurn <= AR_ARROW_SPAWN_DISTANCE) {
+                                // basic guard: only spawn arrow if not already present (we can check arNavSpheres for arrow marker)
+                                const arrowAlready = arNavSpheres.some(s => s.userData && s.userData.isTurnArrow && s.userData.turnIndex === nextTurn.index);
+                                if (!arrowAlready) {
+                                    // load and spawn arrow in front
+                                    spawnTurnArrow(pose, nextTurn).then(() => {
+                                        // flag the last added as turn arrow
+                                        const last = arNavSpheres[arNavSpheres.length - 1];
+                                        if (last) { last.userData.isTurnArrow = true; last.userData.turnIndex = nextTurn.index; }
+                                        if (AR_DEBUG) console.log('spawned arrow for turn', nextTurn);
+                                    });
+                                }
+                            }
+                        }
+
                     } else {
                         // opsional: log kenapa tidak spawn
-                        if (!isGroundPlane) console.log('spawn skip: plane bukan ground (angle > threshold)');
-                        if (!arReticle.visible) console.log('spawn skip: reticle tidak terlihat');
+                        if (!isGroundPlane) if (AR_DEBUG) console.log('spawn skip: plane bukan ground (angle > threshold)');
+                        if (!arReticle.visible) if (AR_DEBUG) console.log('spawn skip: reticle tidak terlihat');
                     }
 
                 }
@@ -989,7 +1238,7 @@ async function initMap() {
         alert('Silakan pilih tujuan dan tekan tombol MULAI sebelum masuk mode AR.');
         return;
     }
-        console.log("Switching to AR Mode...");
+        if (AR_DEBUG) console.log("Switching to AR Mode...");
         
         bottomNavbar.classList.add('translate-y-full');
         
@@ -1038,7 +1287,7 @@ async function initMap() {
 
 
     function switchToMap() {
-        console.log("Switching to Map Mode...");
+        if (AR_DEBUG) console.log("Switching to Map Mode...");
 
         bottomNavbar.classList.remove('translate-y-full');
 
