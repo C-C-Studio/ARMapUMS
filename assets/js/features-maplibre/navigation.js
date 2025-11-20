@@ -115,6 +115,10 @@ function startNavigationMode() {
     elements.startNavBtn.style.display = 'none';
     elements.cancelNavBtn.style.display = 'flex';
     elements.snapToRoadBtn.style.display = 'flex';
+
+    if (elements.bottomNavbar) {
+        elements.bottomNavbar.classList.add('translate-y-full');
+    }
     
     if (state.userLocation) {
         mapInstance.easeTo({
@@ -129,7 +133,7 @@ function startNavigationMode() {
     }
 }
 
-function cancelNavigationMode() {
+export function cancelNavigationMode() {
     state.isNavigating = false;
     state.wasNavigating = false; 
     clearTimeout(state.snapBackTimer);
@@ -144,6 +148,10 @@ function cancelNavigationMode() {
     state.isSnapToRoadActive = false;
     elements.snapToRoadBtn.classList.remove('bg-blue-500');
     elements.snapToRoadBtn.classList.add('bg-gray-500');
+
+    if (elements.bottomNavbar) {
+        elements.bottomNavbar.classList.remove('translate-y-full');
+    }
 
     if (mapInstance.getLayer('route')) mapInstance.removeLayer('route');
     if (mapInstance.getSource('route')) mapInstance.removeSource('route');

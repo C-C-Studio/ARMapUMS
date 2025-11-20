@@ -1,4 +1,5 @@
 import { handleRouteRequest } from './navigation.js';
+import { state } from './state.js';
 
 const openSearchBtn = document.getElementById('open-search-btn');
 const closeSearchBtn = document.getElementById('close-search-btn');
@@ -73,6 +74,8 @@ function hideMapControls() {
 }
 
 function showMapControls() {
+    if (state.isNavigating || state.wasNavigating) return;
+
     if (bottomNavbar) {
         bottomNavbar.classList.remove('translate-y-full');
     }

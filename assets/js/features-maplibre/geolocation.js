@@ -1,5 +1,5 @@
 import { state, config, elements } from './state.js';
-import { createRoute } from './navigation.js'; // Import Circular hati-hati, tapi fungsi aman
+import { createRoute, cancelNavigationMode } from './navigation.js'; // Import Circular hati-hati, tapi fungsi aman
 
 let mapInstance = null;
 let geolocateControl = null;
@@ -54,6 +54,32 @@ function onLocationFound(e) {
     }
 
     state.userLocation = finalLocation;
+
+    if (state.isNavigating && state.currentRouteLine) {
+        // 1. Ambil koordinat titik terakhir dari rute (Tujuan)
+        const routeCoords = state.currentRouteLine.coordinates;
+        const destinationCoord = routeCoords[routeCoords.length - 1];
+
+        // 2. Hitung jarak user ke tujuan (menggunakan Turf.js)
+        const from = turf.point(state.userLocation);
+        const to = turf.point(destinationCoord);
+        const options = {units: 'meters'};
+        const distanceToDest = turf.distance(from, to, options);
+
+        // 3. Cek jika jarak kurang dari 15 meter
+        if (distanceToDest < 15) {
+            console.log("User telah sampai di tujuan!");
+            
+            // Tampilkan Notifikasi
+            alert("🎉 Anda telah sampai di tujuan!");
+            
+            // Hentikan Navigasi Otomatis
+            cancelNavigationMode();
+            
+            // Keluar dari fungsi agar kamera tidak dipaksa bergerak lagi
+            return; 
+        }
+    }
 
     // Update Marker UI
     if (!state.userMarker) {
