@@ -552,6 +552,7 @@ async function initMap() {
         isNavigating = false;
         wasNavigating = false;
         clearTimeout(snapBackTimer);
+        clearNavigationSpheres();
         snapBackTimer = null;
         setARButtonEnabled(false);
         isProgrammaticMove = true;
@@ -698,7 +699,7 @@ async function initMap() {
 
     const AR_DEBUG = true; // set false in production
 
-    const AR_ANGLE_THRESHOLD = 35;    // toleransi ±35° untuk trigger spawn (atur 30-45 saat tuning)
+    const AR_ANGLE_THRESHOLD = 10;    // toleransi ±35° untuk trigger spawn (atur 30-45 saat tuning)
     const AR_HYSTERESIS_ANGLE = 90;
     const LOST_FRAMES_THRESHOLD = 9999; // tidak auto-hapus (saat ini)
     let arSphereSpawned = false;
@@ -717,6 +718,20 @@ async function initMap() {
     const TURN_ANGLE_THRESHOLD = 30;     // derajat perubahan heading untuk deteksi belokan
     const AR_ARROW_SPAWN_DISTANCE = 6.0; // spawn arrow ketika jarak ke belokan <= 6m (sesuaikan)
     const AR_ARROW_MODEL_URL = 'https://raw.githubusercontent.com/C-C-Studio/ARMapUMS/main/assets/3DModel/direction_arrow.glb?raw=1';
+
+    // ---- STATE untuk spawn bertahap ----
+    let sphereBufferPositions = []; // array THREE.Vector3 (world positions) yang siap di-spawn
+    let sphereBufferPrepared = false;
+    const MAX_BUFFER_SPHERES = 5;   // hanya siapkan 5 bola
+    const BUFFER_SPHERE_SPACING = 1.0; // 1 meter antar bola (sesuai permintaan)
+    const SPAWN_TRIGGER_DISTANCE = 0.8; // meter: user harus maju ~0.8m untuk spawn bola berikutnya
+    const HEADING_CHECK_INTERVAL = 2000; // ms: cek kompas tiap 2 detik
+
+    let lastHeadingCheckTime = 0;   // ms timestamp terakhir pengecekan arah
+    let headingAligned = false;     // hasil cek arah terakhir
+
+    let lastUserPosForSpawn = null; // {lat, lng} posisi user saat terakhir spawn bola
+
 
     // route parsed data
     let routePoints = [];      // [{lat, lng}] sampled from directions
@@ -932,31 +947,62 @@ async function initMap() {
         }
     }
 
-    // spawn spheres in front up to distanceMeters (uses originPose)
-    function spawnSpheresInFront(originPose, distanceMeters) {
-        // compute count
-        const count = Math.min(Math.ceil(distanceMeters / SPHERE_SPACING), SPHERE_COUNT_MAX);
-        // reuse addNavigationSpheres style but spawn count-based
-        // matrix from pose
+    // --- Siapkan buffer posisi bola di depan pengguna sampai distanceMeters (max MAX_BUFFER_SPHERES) ---
+    // Tidak langsung menambahkan mesh, hanya menghitung world positions berdasarkan pose
+    function prepareSphereBuffer(originPose, distanceMeters) {
+        sphereBufferPositions = [];
+        sphereBufferPrepared = false;
+
+        if (!originPose || distanceMeters <= 0) return;
+
+        // hitung jumlah bola maksimal sesuai jarak dan batas buffer
+        const count = Math.min(Math.floor(distanceMeters / BUFFER_SPHERE_SPACING), MAX_BUFFER_SPHERES);
+        if (count <= 0) return;
+
         const mat = new THREE.Matrix4().fromArray(originPose.transform.matrix);
+
         for (let i = 1; i <= count; i++) {
-            const d = i * SPHERE_SPACING;
+            const d = i * BUFFER_SPHERE_SPACING;
             const localPos = new THREE.Vector3(0, 0, -d);
             const worldPos = localPos.clone().applyMatrix4(mat);
-
-            const sphereGeo = new THREE.SphereGeometry(0.12, 16, 16);
-            const sphereMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 1.0, depthTest: true, depthWrite: false });
-
-            const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-            sphere.position.copy(worldPos);
-            // blinking phase offset for alternation
-            sphere.userData.blinkOffset = (i % 2 === 0) ? Math.PI : 0;
-            sphere.userData.blinkSpeed = 2.5;
-
-            arScene.add(sphere);
-            arNavSpheres.push(sphere);
+            sphereBufferPositions.push(worldPos);
         }
+
+        sphereBufferPrepared = true;
     }
+
+    // --- Spawn 1 bola berikutnya dari buffer ---
+    // Mengembalikan true jika berhasil spawn, false jika tidak ada buffer
+    function spawnNextBufferedSphere() {
+        if (!sphereBufferPrepared || !sphereBufferPositions.length) return false;
+
+        const worldPos = sphereBufferPositions.shift();
+        // buat mesh sphere seperti sebelumnya
+        const sphereGeo = new THREE.SphereGeometry(0.12, 16, 16);
+        const sphereMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 1.0, depthTest: true, depthWrite: false });
+        const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+        sphere.position.copy(worldPos);
+
+        // animasi blink
+        sphere.userData.blinkOffset = (Math.random() > 0.5) ? Math.PI : 0;
+        sphere.userData.blinkSpeed = 2.5;
+
+        arScene.add(sphere);
+        arNavSpheres.push(sphere);
+
+        // update lastUserPosForSpawn supaya next spawn butuh jarak lagi
+        if (userPosition) {
+            lastUserPosForSpawn = { lat: userPosition.lat(), lng: userPosition.lng() };
+        } else {
+            lastUserPosForSpawn = null;
+        }
+
+        // kalau buffer kosong set prepared false sehingga nanti perlu prepare ulang
+        if (!sphereBufferPositions.length) sphereBufferPrepared = false;
+
+        return true;
+    }
+
 
     // spawn arrow model in front at distanceMeters, rotated to show left/right/straight
     async function spawnTurnArrow(originPose, turn) {
@@ -1027,7 +1073,14 @@ async function initMap() {
             }
         });
         arNavSpheres = [];
+
+        // reset buffer state
+        sphereBufferPositions = [];
+        sphereBufferPrepared = false;
+        lastUserPosForSpawn = null;
+        arSphereSpawned = false;
     }
+
 
 
 
@@ -1137,7 +1190,10 @@ async function initMap() {
                             return { nextTurn, distToNextTurn };
                         }
 
-                        // inside isGroundPlane && arReticle.visible
+                        // --- LOGIKA SPAWN BERTAHAP: cek heading periodik lalu spawn 1-per-1 saat user maju ---
+                        const nowMs = (typeof time === 'number') ? time : performance.now();
+
+                        // heading pengguna & heading rute
                         const headingNow = (window.__UMS_AR_HEADING ?? arHeading ?? null);
                         const navHeading = getNavHeadingFromRoute();
 
@@ -1145,42 +1201,69 @@ async function initMap() {
                             arTargetHeading = navHeading;
                             const angDiff = shortestAngleDiff(headingNow, arTargetHeading);
 
-                            // compute distance to next turn
-                            const routeInfo = distanceAlongRouteFromUser();
+                            // periodic heading check (hemat resource): setiap HEADING_CHECK_INTERVAL ms
+                            if (nowMs - lastHeadingCheckTime >= HEADING_CHECK_INTERVAL) {
+                                headingAligned = (angDiff <= AR_ANGLE_THRESHOLD);
+                                lastHeadingCheckTime = nowMs;
+                                if (AR_DEBUG) console.log('Heading check:', { angDiff: angDiff.toFixed(1), headingAligned });
+                            }
+
+                            // jika ada rute, hitung jarak ke belokan berikutnya
+                            const routeInfo = (typeof distanceAlongRouteFromUser === 'function') ? distanceAlongRouteFromUser() : null;
                             const distToNextTurn = routeInfo ? routeInfo.distToNextTurn : null;
                             const nextTurn = routeInfo ? routeInfo.nextTurn : null;
 
-                            // decide how many spheres to spawn: spawn up to min(distToNextTurn, SPHERE_COUNT_MAX*SPHERE_SPACING)
-                            let spawnDist = distToNextTurn != null ? Math.min(distToNextTurn, SPHERE_COUNT_MAX * SPHERE_SPACING) : Math.min( SPHERE_COUNT_MAX * SPHERE_SPACING, 10);
+                            // tentukan jarak total yang ingin kita pandu (spawn buffer), sampai next turn atau default
+                            let intendedGuidanceDist = distToNextTurn != null ? Math.min(distToNextTurn, SPHERE_COUNT_MAX * SPHERE_SPACING) : Math.min(SPHERE_COUNT_MAX * SPHERE_SPACING, 10);
 
-                            // if no upcoming turn detected, spawn default forward guidance
-                            if (!spawnDist || spawnDist <= 0) spawnDist = Math.min( SPHERE_COUNT_MAX * SPHERE_SPACING, 10 );
+                            // gunakan hanya MAX_BUFFER_SPHERES (5) dan spacing BUFFER_SPHERE_SPACING
+                            intendedGuidanceDist = Math.min(intendedGuidanceDist, MAX_BUFFER_SPHERES * BUFFER_SPHERE_SPACING);
 
-                            // spawn spheres only once per AR activation, or when not spawned yet
-                            if (!arSphereSpawned && angDiff <= AR_ANGLE_THRESHOLD) {
-                                // clear old
+                            // Jika heading sesuai dan belum ada buffer dipersiapkan → prepare buffer & spawn 1 bola pertama
+                            if (headingAligned && !sphereBufferPrepared) {
+                                // bersihkan bola sebelumnya & prepare baru (jika ada)
                                 clearNavigationSpheres();
-                                // spawn spheres forward up to spawnDist
-                                spawnSpheresInFront(pose, spawnDist);
-                                arSphereSpawned = true;
-                                if (AR_DEBUG) console.log('spawned spheres for dist', spawnDist, 'm, distToNextTurn', distToNextTurn);
-                            }
+                                prepareSphereBuffer(pose, intendedGuidanceDist);
 
-                            // spawn arrow when approaching turn and not already spawned arrow for that turn
-                            if (nextTurn && distToNextTurn <= AR_ARROW_SPAWN_DISTANCE) {
-                                // basic guard: only spawn arrow if not already present (we can check arNavSpheres for arrow marker)
-                                const arrowAlready = arNavSpheres.some(s => s.userData && s.userData.isTurnArrow && s.userData.turnIndex === nextTurn.index);
-                                if (!arrowAlready) {
-                                    // load and spawn arrow in front
-                                    spawnTurnArrow(pose, nextTurn).then(() => {
-                                        // flag the last added as turn arrow
-                                        const last = arNavSpheres[arNavSpheres.length - 1];
-                                        if (last) { last.userData.isTurnArrow = true; last.userData.turnIndex = nextTurn.index; }
-                                        if (AR_DEBUG) console.log('spawned arrow for turn', nextTurn);
-                                    });
+                                // spawn pertama langsung agar user mendapat tanda
+                                if (sphereBufferPrepared) {
+                                    spawnNextBufferedSphere();
+                                    arSphereSpawned = true;
+                                    if (AR_DEBUG) console.log('Prepared buffer and spawned first sphere (buffer size)', sphereBufferPositions.length);
                                 }
                             }
+
+                            // jika buffer sudah dipersiapkan, spawn bola selanjutnya saat user sudah maju SPAWN_TRIGGER_DISTANCE
+                            if (sphereBufferPrepared) {
+                                // pastikan kita punya posisi user sebelumnya untuk perbandingan
+                                if (lastUserPosForSpawn && userPosition) {
+                                    const moved = haversineDistance(lastUserPosForSpawn.lat, lastUserPosForSpawn.lng, userPosition.lat(), userPosition.lng());
+                                    if (moved >= SPAWN_TRIGGER_DISTANCE) {
+                                        const ok = spawnNextBufferedSphere();
+                                        if (ok && AR_DEBUG) console.log('Spawned next buffered sphere after user moved', moved.toFixed(2), 'm');
+                                    }
+                                } else {
+                                    // jika belum ada reference lastUserPosForSpawn tapi buffer ada, set lastUserPosForSpawn sekarang
+                                    if (userPosition && !lastUserPosForSpawn) {
+                                        lastUserPosForSpawn = { lat: userPosition.lat(), lng: userPosition.lng() };
+                                    }
+                                }
+                            }
+
+                            // Spawn arrow when approaching turn (sama seperti sebelumnya)
+                            if (nextTurn && distToNextTurn <= AR_ARROW_SPAWN_DISTANCE) {
+                                const arrowAlready = arNavSpheres.some(s => s.userData && s.userData.isTurnArrow && s.userData.turnIndex === nextTurn.index);
+                                if (!arrowAlready) {
+                                    spawnTurnArrow(pose, nextTurn);
+                                    if (AR_DEBUG) console.log('spawned arrow for turn', nextTurn);
+                                }
+                            }
+                        } else {
+                            // kalau heading belum tersedia -> jangan spawn
+                            if (AR_DEBUG && !headingNow) console.log('spawn skip: headingNow null');
+                            if (AR_DEBUG && !navHeading) console.log('spawn skip: navHeading null');
                         }
+
 
                     } else {
                         // opsional: log kenapa tidak spawn
