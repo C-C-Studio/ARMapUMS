@@ -71,6 +71,10 @@ async function initMap() {
 
     let isNavigating = false;
     let wasNavigating = false;
+
+    let isSnapToRoadActive = false; 
+    let currentRouteLine = null;
+
     let snapBackTimer = null;
     let pendingDestination = null; 
     let isProgrammaticMove = false; 
@@ -85,6 +89,7 @@ async function initMap() {
     const locateButton = document.getElementById('locate-btn');
     const startNavButton = document.getElementById('start-nav-btn');
     const cancelNavButton = document.getElementById('cancel-nav-btn');
+    const snapToRoadBtn = document.getElementById('snap-to-road-btn');
     
     // Elemen Kompas Peta
     const compassIndicator = document.getElementById('compass-indicator');
@@ -140,6 +145,8 @@ async function initMap() {
             alert('Lokasi Anda atau tujuan belum siap untuk memulai navigasi.');
         }
     });
+
+    snapToRoadBtn.addEventListener('click', toggleSnapToRoad);
 
     cancelNavButton.addEventListener('click', () => {
         directionsRenderer.setDirections({ routes: [] }); 
@@ -338,7 +345,27 @@ async function initMap() {
 
     function updateUserLocation(position) { 
         const { latitude, longitude } = position.coords; 
-        userPosition = new LatLng(latitude, longitude);
+
+        // 1. Simpan posisi mentah dulu
+        let finalLat = latitude;
+        let finalLng = longitude;
+
+        // --- BARU: Logika Snap to Road ---
+        // Cek: Navigasi Aktif? + Fitur Aktif? + Ada Data Rute? + Navigasi tidak sedang dijeda (wasNavigating)?
+        if ((isNavigating || wasNavigating) && isSnapToRoadActive && currentRouteLine) {
+            const userPoint = turf.point([longitude, latitude]); // [lng, lat]
+            
+            // Cari titik terdekat di garis rute
+            const snapped = turf.nearestPointOnLine(currentRouteLine, userPoint);
+            
+            // Ambil koordinat hasil snap
+            const [snappedLng, snappedLat] = snapped.geometry.coordinates;
+            
+            finalLat = snappedLat;
+            finalLng = snappedLng;
+        }
+        
+        userPosition = new LatLng(finalLat, finalLng);
 
         if (!isUserOnCampus(userPosition)) {
             // console.warn('Anda terdeteksi berada di luar area kampus.');
@@ -409,6 +436,21 @@ async function initMap() {
         directionsService.route(request)
             .then((response) => {
                 directionsRenderer.setDirections(response);
+                try {
+                    const route = response.routes[0];
+                    // overview_path berisi array LatLng yang disederhanakan
+                    const path = route.overview_path; 
+                    
+                    // Turf butuh format [lng, lat] (kebalik dari Google)
+                    const turfCoords = path.map(p => [p.lng(), p.lat()]);
+                    
+                    currentRouteLine = turf.lineString(turfCoords);
+                    console.log("Rute Turf.js berhasil dibuat untuk Snap to Road");
+                } catch (e) {
+                    console.warn("Gagal membuat rute Turf.js:", e);
+                    currentRouteLine = null;
+                }
+
                 // 🔽 gambar rute juga di mini map kalau sudah dibuat
                 // ---- parse route into points & segments for AR guidance ----
                 (function parseRouteForAR(resp) {
@@ -522,6 +564,7 @@ async function initMap() {
             // 3. Sembunyikan tombol-tombol navigasi (akan dimunculkan lagi oleh rute baru)
             cancelNavButton.style.display = 'none';
             startNavButton.style.display = 'none';
+            snapToRoadBtn.style.display = 'none';
         }
 
         const destination = new LatLng(lat, lon);
@@ -534,6 +577,7 @@ async function initMap() {
         clearTimeout(snapBackTimer);
         startNavButton.style.display = 'none';   
         cancelNavButton.style.display = 'flex';
+        snapToRoadBtn.style.display = 'flex';
         setARButtonEnabled(true);  
         startWatchingLocation();
         if (userPosition) {
@@ -548,12 +592,39 @@ async function initMap() {
             });
         }
     }
+    // --- BARU: Fungsi Toggle Snap to Road ---
+    function toggleSnapToRoad() {
+        isSnapToRoadActive = !isSnapToRoadActive;
+        console.log("Status Snap to Road:", isSnapToRoadActive);
+
+        if (isSnapToRoadActive) {
+            snapToRoadBtn.classList.remove('bg-gray-500');
+            snapToRoadBtn.classList.add('bg-blue-500');
+            snapToRoadBtn.setAttribute('title', 'Snap to Road (Aktif)');
+        } else {
+            snapToRoadBtn.classList.remove('bg-blue-500');
+            snapToRoadBtn.classList.add('bg-gray-500');
+            snapToRoadBtn.setAttribute('title', 'Snap to Road (Nonaktif)');
+        }
+        
+        // Paksa update lokasi segera agar efeknya langsung terasa
+        if (userPosition) {
+            // Panggil update manual dengan posisi terakhir (hacky but works)
+            updateUserLocation({ coords: { latitude: userPosition.lat(), longitude: userPosition.lng() } });
+        }
+    }
+
     function cancelNavigationMode() { 
         isNavigating = false;
         wasNavigating = false;
         clearTimeout(snapBackTimer);
         clearNavigationSpheres();
+        currentRouteLine = null;
         snapBackTimer = null;
+        isSnapToRoadActive = false;
+        snapToRoadBtn.classList.remove('bg-blue-500');
+        snapToRoadBtn.classList.add('bg-gray-500');
+        snapToRoadBtn.style.display = 'none';
         setARButtonEnabled(false);
         isProgrammaticMove = true;
         map.setCenter(defaultCenter);
@@ -575,9 +646,9 @@ async function initMap() {
             isNavigating = false;
             wasNavigating = true; 
         }
-        if (cancelNavButton.style.display === 'flex') {
-             cancelNavButton.style.display = 'none';
-        }
+        // if (cancelNavButton.style.display === 'flex') {
+        //      cancelNavButton.style.display = 'none';
+        // }
     }
     function startSnapBackTimer() { 
         if (isProgrammaticMove) {
@@ -587,6 +658,7 @@ async function initMap() {
         if (wasNavigating && directionsRenderer.getDirections()?.routes.length > 0) {
             if (AR_DEBUG) console.log('User stopped. Starting 4-second snap-back timer...');
             cancelNavButton.style.display = 'flex';
+            snapToRoadBtn.style.display = 'flex';
             snapBackTimer = setTimeout(() => {
                 if (AR_DEBUG) console.log('Timer finished. Snapping back to navigation.');
                 startNavigationMode(); 

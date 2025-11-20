@@ -8,7 +8,7 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-    
+    <script src='https://unpkg.com/@turf/turf@6/turf.min.js'></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         body {
@@ -20,7 +20,22 @@
         /* ... (Style InfoWindow dan User Location Marker Anda tetap di sini) ... */
         .gm-style .gm-style-iw-c { padding: 0; background: none; box-shadow: none; }
         .gm-style .gm-style-iw-t::after { background: none; }
-        .user-location-marker { position: relative; width: 22px; height: 22px; transform: translate(-50%, -50%); pointer-events: none; }
+        .user-location-marker { 
+            position: relative; 
+            width: 22px; 
+            height: 22px; 
+            
+            /* --- PERBAIKAN DI SINI --- */
+            /* HAPUS atau KOMENTARI baris transform ini: */
+            /* transform: translate(-50%, -50%); */ 
+            
+            /* GANTI DENGAN Negative Margin (Setengah dari 22px) */
+            margin-top: -11px;  
+            margin-left: -11px;
+            /* ------------------------- */
+
+            pointer-events: none; 
+        }
         .user-location-dot { width: 18px; height: 18px; border-radius: 50%; background-color: #1a73e8; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.4); position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2; }
         .user-location-heading { width: 60px; height: 60px; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(0deg); transform-origin: center center; background: conic-gradient( from 300deg at 50% 50%, #1a73e84D 0deg, #1a73e84D 120deg, transparent 120.1deg, transparent 360deg ); border-radius: 50%; z-index: 1; transition: transform 0.2s ease-out; }
     </style>
@@ -91,7 +106,18 @@
         </div>
 
         <button id="start-nav-btn" title="Start Navigation" class="absolute mb-12 bottom-52 right-6 z-10 bg-blue-500 text-white w-auto h-14 px-5 rounded-full shadow-lg flex justify-center items-center font-semibold" style="display: none;"><i class="fas fa-location-arrow mr-2"></i>MULAI</button>
-        <button id="cancel-nav-btn" title="Cancel Navigation" class="absolute mb-12 bottom-52 right-6 z-10 bg-red-500 text-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-xl" style="display: none;"><i class="fas fa-times"></i></button>
+        
+        <div class="absolute mb-12 bottom-52 right-6 z-10 flex flex-col gap-3">
+            
+            <button id="cancel-nav-btn" title="Cancel Navigation" class="bg-red-500 text-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-xl" style="display: none;">
+                <i class="fas fa-times"></i>
+            </button>
+
+            <button id="snap-to-road-btn" title="Snap to Road (Nonaktif)" class="bg-gray-500 text-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-xl" style="display: none;">
+                <i class="fas fa-road"></i>
+            </button>
+
+        </div>
 
         <button id="ar-btn" title="Enter AR Mode" class="absolute mb-12 bottom-36 right-6 z-10 bg-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-gray-700 text-xl">
             <i class="fas fa-vr-cardboard"></i>
