@@ -771,7 +771,7 @@ async function initMap() {
 
     const AR_DEBUG = true; // set false in production
 
-    const AR_ANGLE_THRESHOLD = 10;    // toleransi ±35° untuk trigger spawn (atur 30-45 saat tuning)
+    const AR_ANGLE_THRESHOLD = 15;    // toleransi ±35° untuk trigger spawn (atur 30-45 saat tuning)
     const AR_HYSTERESIS_ANGLE = 90;
     const LOST_FRAMES_THRESHOLD = 9999; // tidak auto-hapus (saat ini)
     let arSphereSpawned = false;
