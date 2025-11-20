@@ -61,7 +61,7 @@ export function setupUI(map) {
     });
     map.on('moveend', function() {
         clearTimeout(hideControlsTimer);
-        hideControlsTimer = setTimeout(showMapControls, 2000);
+        hideControlsTimer = setTimeout(showMapControls, 1000);
     });
 }
 
