@@ -56,27 +56,31 @@ function onLocationFound(e) {
     state.userLocation = finalLocation;
 
     if (state.isNavigating && state.currentRouteLine) {
-        // 1. Ambil koordinat titik terakhir dari rute (Tujuan)
+        // 1. Ambil koordinat tujuan
         const routeCoords = state.currentRouteLine.coordinates;
         const destinationCoord = routeCoords[routeCoords.length - 1];
 
-        // 2. Hitung jarak user ke tujuan (menggunakan Turf.js)
+        // 2. Hitung jarak (Turf.js)
         const from = turf.point(state.userLocation);
         const to = turf.point(destinationCoord);
-        const options = {units: 'meters'};
-        const distanceToDest = turf.distance(from, to, options);
+        const distanceKm = turf.distance(from, to, {units: 'kilometers'});
+        const distanceMeters = distanceKm * 1000;
 
-        // 3. Cek jika jarak kurang dari 15 meter
-        if (distanceToDest < 15) {
-            console.log("User telah sampai di tujuan!");
-            
-            // Tampilkan Notifikasi
+        // 3. Update UI Teks
+        if (elements.distanceText) {
+            if (distanceMeters < 1000) {
+                // Jika di bawah 1km, tampilkan meter (misal: 450 m)
+                elements.distanceText.innerText = `${Math.round(distanceMeters)} m`;
+            } else {
+                // Jika di atas 1km, tampilkan km (misal: 1.2 km)
+                elements.distanceText.innerText = `${distanceKm.toFixed(1)} km`;
+            }
+        }
+
+        // 4. Cek Sampai Tujuan (< 15 meter)
+        if (distanceMeters < 15) {
             alert("🎉 Anda telah sampai di tujuan!");
-            
-            // Hentikan Navigasi Otomatis
             cancelNavigationMode();
-            
-            // Keluar dari fungsi agar kamera tidak dipaksa bergerak lagi
             return; 
         }
     }
@@ -98,7 +102,8 @@ function onLocationFound(e) {
             bearing: state.lastCompassAlpha || 0, // Head Up
             duration: 1000,
             easing: n => n,
-            pitch: 60
+            pitch: 60,
+            padding: { top: 300 }
         });
     }
     
@@ -196,8 +201,14 @@ function handleMapOrientation(event) {
     state.lastCompassAlpha = state.smoothedAlpha; 
     updateRealCompassDegree(state.smoothedAlpha);
     
-    if (elements.compassIndicator) elements.compassIndicator.style.display = 'flex';
-    if (elements.degreeIndicator) elements.degreeIndicator.style.display = 'flex';
+    if (!state.isPreviewingRoute) {
+        if (elements.compassIndicator && elements.compassIndicator.style.display === 'none') {
+            elements.compassIndicator.style.display = 'flex';
+        }
+        if (elements.degreeIndicator && elements.degreeIndicator.style.display === 'none') {
+            elements.degreeIndicator.style.display = 'flex';
+        }
+    }
     
     updateCompassRotation();
 }

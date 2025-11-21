@@ -86,7 +86,7 @@
             </button>
         </header>
         
-        <div id="search-panel" class="absolute inset-0 z-20 bg-[#0c2340] flex flex-col transition-transform duration-300 ease-in-out -translate-y-full">
+        <div id="search-panel" class="absolute inset-0 z-30 bg-[#0c2340] flex flex-col transition-transform duration-300 ease-in-out -translate-y-full">
             <main class="flex-grow p-5 overflow-y-auto">
                 <div class="flex items-center gap-4 mb-6">
                     <button id="close-search-btn" class="text-white text-xl" title="Back to Map">
@@ -108,10 +108,33 @@
             </main>
         </div>
 
-        <button id="start-nav-btn" title="Start Navigation" class="absolute mb-12 bottom-52 right-6 z-10 bg-blue-500 text-white w-auto h-14 px-5 rounded-full shadow-lg flex justify-center items-center font-semibold" style="display: none;">
-            <i class="fas fa-location-arrow mr-2"></i>
-            MULAI
-        </button>
+        <div id="route-info-panel" class="absolute bottom-0 left-0 right-0 z-20 bg-white rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.1)] p-6 transform transition-transform duration-300 translate-y-full">
+            <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-4"></div>
+            
+            <div class="mb-4">
+                <h2 id="route-dest-name" class="text-xl font-bold text-gray-900 leading-tight mb-1">Nama Tujuan</h2>
+                <div class="flex items-center gap-3 text-gray-600 text-sm font-medium">
+                    <div class="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-md">
+                        <i class="fas fa-walking text-blue-500"></i>
+                        <span id="route-dest-time">0 min</span>
+                    </div>
+                    <span class="text-gray-300">•</span>
+                    <span id="route-dest-distance">0 km</span>
+                </div>
+            </div>
+
+            <button id="start-nav-btn" class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                <i class="fas fa-location-arrow"></i>
+                MULAI NAVIGASI
+            </button>
+        </div>
+
+        <div id="distance-indicator" 
+             class="absolute bottom-16 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur-sm text-blue-600 px-6 py-3 rounded-full shadow-xl font-bold text-base border-2 border-blue-100 flex items-center justify-center gap-2 transition-all transform" 
+             style="display: none;">
+            <i class="fas fa-flag-checkered text-blue-500"></i>
+            <span id="distance-text">0 m</span>
+        </div>
 
         <div class="absolute mb-12 bottom-52 right-6 z-10 flex flex-col gap-3">
             
