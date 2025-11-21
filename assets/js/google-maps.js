@@ -12,9 +12,44 @@ import { initGeofence, isUserOnCampus } from './geofence-google.js';
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
+// NAV ARROW (linear guidance arrow)
+const AR_NAV_ARROW_URL = 'https://raw.githubusercontent.com/C-C-Studio/ARMapUMS/main/assets/3DModel/arrow2.glb';
 
+// loader & cache untuk panah navigasi (berbeda dari turn arrow jika mau)
+const navGltfLoader = new GLTFLoader();
+let navArrowScene = null;
+let navArrowLoaded = false;
 
+function loadNavArrowModel() {
+    if (navArrowLoaded) return Promise.resolve(navArrowScene.clone());
+    return new Promise((resolve, reject) => {
+        navGltfLoader.load(AR_NAV_ARROW_URL, (gltf) => {
+            navArrowScene = gltf.scene;
+            navArrowLoaded = true;
+            resolve(navArrowScene.clone());
+        }, undefined, (err) => {
+            console.error('Failed load nav arrow GLB', err);
+            reject(err);
+        });
+    });
+}
 
+// state untuk panah navigasi (single moving arrow)
+let navArrowObject = null;     // THREE.Object3D instance currently in scene
+let navArrowPose = null;       // last hit-test pose used for placement (array matrix)
+let navArrowStepDistance = 1.0; // step length in meters when advancing
+const NAV_ARROW_SIDE_OFFSET = 0.6; // meter to the right of the user/camera
+const NAV_ARROW_PROXIMITY = 1.2; // when distance to arrow <= this -> advance arrow
+const NAV_ARROW_BOB_AMPLITUDE = 0.12; // bob up-down amplitude (m)
+const NAV_ARROW_BOB_SPEED = 2.0; // bob frequency (Hz)
+let navArrowProgressDistance = 0; // total distance the arrow has been advanced from origin
+let navArrowActive = false;
+let navArrowForTurn = false; // flag if currently showing turn guidance (true -> arrow indicates turn)
+let navArrowTurnIndex = null;
+
+// TAMBAHKAN INI: Flag untuk mencegah spawn ganda
+let isSpawningNavArrow = false; 
+let isSpawningTurnArrow = false;
 
 // 🔽 tambahkan ini
 const arMapOverlay = document.getElementById('ar-map-overlay');
@@ -38,6 +73,19 @@ async function initMap() {
 
     // Inisialisasi modul geofence
     await initGeofence();
+
+    // --- TAMBAHAN: UI PERINGATAN SALAH ARAH ---
+    const wrongWayWarning = document.createElement('div');
+    wrongWayWarning.id = 'ar-wrong-way';
+    wrongWayWarning.className = 'absolute top-32 left-1/2 -translate-x-1/2 bg-red-600/90 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-3 z-50 animate-pulse';
+    wrongWayWarning.style.display = 'none'; // Sembunyi default
+    wrongWayWarning.innerHTML = '<i class="fas fa-undo-alt text-xl"></i> <span>SALAH ARAH</span>';
+    
+    // Masukkan ke dalam container AR
+    const arContainerEl = document.getElementById('ar-container');
+    if (arContainerEl) {
+        arContainerEl.appendChild(wrongWayWarning);
+    }
     
     const mapElement = document.querySelector('gmp-map'); 
     const map = mapElement.innerMap;
@@ -618,6 +666,10 @@ async function initMap() {
         isNavigating = false;
         wasNavigating = false;
         clearTimeout(snapBackTimer);
+        // di cancelNavigationMode (tambahkan jika belum ada)
+        hideNavArrow();
+
+
         clearNavigationSpheres();
         currentRouteLine = null;
         snapBackTimer = null;
@@ -752,6 +804,8 @@ async function initMap() {
     let arSurfaceDetected = false;
     let arNavSpheres = [];
 
+
+    let initialScanComplete = false; // Penanda apakah scan awal sudah selesai
     const arScanningText = document.getElementById('ar-scanning-text');
 
     // rute sederhana (contoh dari index.html)
@@ -779,9 +833,9 @@ async function initMap() {
     let arLostHeadingFrames = 0;
 
     // Ground detection threshold & smoothing untuk angleDeg
-    const HORIZONTAL_ANGLE_THRESHOLD = 25; // <=25° dianggap horizontal
+    const HORIZONTAL_ANGLE_THRESHOLD = 50; // <=25° dianggap horizontal
     let smoothedPlaneAngle = null;
-    const planeSmoothingFactor = 0.2; // 0..1, lebih besar = lebih responsif
+    const planeSmoothingFactor = 0.8; // 0..1, lebih besar = lebih responsif
 
 
     // GUIDANCE config
@@ -789,11 +843,9 @@ async function initMap() {
     const SPHERE_COUNT_MAX = 20;         // limit maksimum bola yang di-spawn
     const TURN_ANGLE_THRESHOLD = 30;     // derajat perubahan heading untuk deteksi belokan
     const AR_ARROW_SPAWN_DISTANCE = 6.0; // spawn arrow ketika jarak ke belokan <= 6m (sesuaikan)
-    const AR_ARROW_MODEL_URL = 'https://raw.githubusercontent.com/C-C-Studio/ARMapUMS/main/assets/3DModel/direction_arrow.glb?raw=1';
+    const AR_ARROW_MODEL_URL = 'https://raw.githubusercontent.com/C-C-Studio/ARMapUMS/main/assets/3DModel/arrow.glb';
 
     // ---- STATE untuk spawn bertahap ----
-    let sphereBufferPositions = []; // array THREE.Vector3 (world positions) yang siap di-spawn
-    let sphereBufferPrepared = false;
     const MAX_BUFFER_SPHERES = 5;   // hanya siapkan 5 bola
     const BUFFER_SPHERE_SPACING = 1.0; // 1 meter antar bola (sesuai permintaan)
     const SPAWN_TRIGGER_DISTANCE = 0.8; // meter: user harus maju ~0.8m untuk spawn bola berikutnya
@@ -929,7 +981,7 @@ async function initMap() {
             return;
         }
         if (arSession) return;
-
+        initialScanComplete = false;
         initARRenderer();
 
         try {
@@ -974,111 +1026,11 @@ async function initMap() {
         }
     }
 
-    function addNavigationSpheres(originPose) {
-        // kalau index di luar jangkauan, jangan lakukan apa-apa
-        if (!originPose || arCurrentStep < 0 || arCurrentStep >= arRoute.length) return;
-
-        const stepDistance = 1.0;
-        const totalDistance = arRoute[arCurrentStep].distance;
-        const numSpheres = Math.floor(totalDistance / stepDistance);
-
-        // matrix pose dari hit-test (reticle)
-        const mat = new THREE.Matrix4().fromArray(originPose.transform.matrix);
-
-        // blink params
-        const blinkSpeed = 3.0; // frekuensi kedip (Hz) - tweak jika perlu
-        for (let i = 1; i <= numSpheres; i++) {
-            const distance = i * stepDistance;
-
-            // posisi lokal: tepat di depan kamera (arah -Z)
-            const localPos = new THREE.Vector3(0, 0, -distance);
-            const worldPos = localPos.clone().applyMatrix4(mat);
-
-            const sphereGeo = new THREE.SphereGeometry(0.12, 16, 16);
-
-            // material yang mendukung opacity untuk blink
-            const sphereMat = new THREE.MeshBasicMaterial({
-                color: 0x00aaff,
-                transparent: true,
-                opacity: 1.0, // initial, akan di-animate
-                depthTest: true,
-                depthWrite: false
-            });
-
-            const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-
-            // set posisi
-            sphere.position.copy(worldPos);
-
-            // simpan userData untuk animasi (phase/offset supaya blinking tidak sinkron)
-            sphere.userData.blinkOffset = (i % 2 === 0) ? Math.PI : 0; // bergantian: even/odd phase
-            sphere.userData.blinkSpeed = blinkSpeed;
-
-            arScene.add(sphere);
-            arNavSpheres.push(sphere);
-        }
-    }
-
-    // --- Siapkan buffer posisi bola di depan pengguna sampai distanceMeters (max MAX_BUFFER_SPHERES) ---
-    // Tidak langsung menambahkan mesh, hanya menghitung world positions berdasarkan pose
-    function prepareSphereBuffer(originPose, distanceMeters) {
-        sphereBufferPositions = [];
-        sphereBufferPrepared = false;
-
-        if (!originPose || distanceMeters <= 0) return;
-
-        // hitung jumlah bola maksimal sesuai jarak dan batas buffer
-        const count = Math.min(Math.floor(distanceMeters / BUFFER_SPHERE_SPACING), MAX_BUFFER_SPHERES);
-        if (count <= 0) return;
-
-        const mat = new THREE.Matrix4().fromArray(originPose.transform.matrix);
-
-        for (let i = 1; i <= count; i++) {
-            const d = i * BUFFER_SPHERE_SPACING;
-            const localPos = new THREE.Vector3(0, 0, -d);
-            const worldPos = localPos.clone().applyMatrix4(mat);
-            sphereBufferPositions.push(worldPos);
-        }
-
-        sphereBufferPrepared = true;
-    }
-
-    // --- Spawn 1 bola berikutnya dari buffer ---
-    // Mengembalikan true jika berhasil spawn, false jika tidak ada buffer
-    function spawnNextBufferedSphere() {
-        if (!sphereBufferPrepared || !sphereBufferPositions.length) return false;
-
-        const worldPos = sphereBufferPositions.shift();
-        // buat mesh sphere seperti sebelumnya
-        const sphereGeo = new THREE.SphereGeometry(0.12, 16, 16);
-        const sphereMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 1.0, depthTest: true, depthWrite: false });
-        const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-        sphere.position.copy(worldPos);
-
-        // animasi blink
-        sphere.userData.blinkOffset = (Math.random() > 0.5) ? Math.PI : 0;
-        sphere.userData.blinkSpeed = 2.5;
-
-        arScene.add(sphere);
-        arNavSpheres.push(sphere);
-
-        // update lastUserPosForSpawn supaya next spawn butuh jarak lagi
-        if (userPosition) {
-            lastUserPosForSpawn = { lat: userPosition.lat(), lng: userPosition.lng() };
-        } else {
-            lastUserPosForSpawn = null;
-        }
-
-        // kalau buffer kosong set prepared false sehingga nanti perlu prepare ulang
-        if (!sphereBufferPositions.length) sphereBufferPrepared = false;
-
-        return true;
-    }
-
-
     // spawn arrow model in front at distanceMeters, rotated to show left/right/straight
     async function spawnTurnArrow(originPose, turn) {
+        if (isSpawningTurnArrow) return;
         try {
+            isSpawningTurnArrow = true;
             const arrow = await loadArrowModel();
             // arrow is a Scene/group clone already returned by loader
             const arrowRoot = arrow;
@@ -1112,7 +1064,186 @@ async function initMap() {
         } catch (e) {
             console.warn('spawnTurnArrow failed', e);
         }
+        finally {
+        // 3. Reset flag
+        isSpawningTurnArrow = false;
+        }
     }
+
+    // Buat panah navigasi (Spawn di depan mata user, lalu rotate ke arah tujuan)
+    async function showNavArrow(originPose, forTurn = false, turnData = null) {
+
+        // Cegah spawn bertumpuk
+        if (isSpawningNavArrow) return;
+
+        try {
+            isSpawningNavArrow = true;
+            
+            // Hapus panah lama (agar posisi reset ke depan user lagi)
+            hideNavArrow();
+
+            const arrow = await loadNavArrowModel();
+            const arrowRoot = arrow; 
+
+            // Setup data user
+            navArrowForTurn = !!forTurn;
+            navArrowTurnIndex = forTurn && turnData ? turnData.index : null;
+
+            // ============================================================
+            // 1. POSISI: SELALU MUNCUL DI DEPAN MATA USER (Relative)
+            // ============================================================
+            const mat = new THREE.Matrix4().fromArray(originPose.transform.matrix);
+            
+            // Ambil posisi 3 meter di depan kamera (-Z local)
+            // Kita set X=0 (tengah) agar user langsung melihatnya
+            const forwardDistance = 3.0; 
+            const localPos = new THREE.Vector3(0, 0, -forwardDistance); 
+            
+            // Konversi ke koordinat dunia AR
+            const worldPos = localPos.clone().applyMatrix4(mat); 
+
+            arrowRoot.position.copy(worldPos);
+            arrowRoot.position.y += 0.05; // Sedikit melayang dari lantai (jika lantai sejajar kamera)
+            
+            // Simpan posisi Y awal untuk referensi (bisa di-tweak dengan raycast lantai jika mau lebih canggih)
+            // Untuk sekarang, kita asumsikan tinggi HP user rata-rata, kita turunkan dikit biar sejajar kaki
+            arrowRoot.position.y -= 1.0; 
+
+            arrowRoot.scale.set(1, 1, 1);
+            arrowRoot.userData = arrowRoot.userData || {};
+            arrowRoot.userData.baseY = arrowRoot.position.y;
+            arrowRoot.userData.isNavArrow = true;
+
+            // ============================================================
+            // 2. ROTASI: SESUAIKAN DENGAN SELISIH KOMPAS
+            // ============================================================
+            
+            // A. Dapatkan arah kompas user saat ini (0-360)
+            const userCompassHeading = window.__UMS_AR_HEADING || 0; 
+            
+            // B. Dapatkan arah tujuan (Bearing)
+            let targetBearing = 0;
+            if (forTurn && turnData) {
+                targetBearing = turnData.bearing;
+            } else {
+                targetBearing = getNavHeadingFromRoute() || 0;
+            }
+
+            // C. Samakan orientasi panah dengan kamera dulu
+            // Ini kuncinya: Kita "reset" rotasi panah agar sama persis dengan user melihat kemana
+            const camQuat = new THREE.Quaternion().setFromRotationMatrix(mat);
+            arrowRoot.quaternion.copy(camQuat);
+
+            // D. Hitung selisih sudut (Delta)
+            // Rumus: Target - User
+            // Contoh: User hadap Utara (0), Tujuan Timur (90). Diff = +90.
+            let angleDiff = targetBearing - userCompassHeading;
+
+            // Normalisasi sudut agar selalu di range -180 sampai 180
+            // Agar panah memutar lewat jalan terpendek
+            if (angleDiff > 180) angleDiff -= 360;
+            if (angleDiff < -180) angleDiff += 360;
+
+            // E. Terapkan Rotasi
+            // Three.js menggunakan rotasi Counter-Clockwise (CCW) untuk positif.
+            // Kompas menggunakan Clockwise (CW). Jadi kita pakai tanda negatif (-).
+            const rotationRad = angleDiff * (Math.PI / 180);
+            
+            // Putar panah pada sumbu Y (vertikal) relatif terhadap rotasi kamera tadi
+            arrowRoot.rotateY(-rotationRad);
+
+            // ============================================================
+            // 3. FINISHING
+            // ============================================================
+            
+            arScene.add(arrowRoot);
+            navArrowObject = arrowRoot;
+            
+            // Simpan pose asal untuk perhitungan langkah maju (advanceNavArrow)
+            navArrowPose = originPose.transform.matrix.slice(); 
+            navArrowProgressDistance = 0;
+            navArrowActive = true;
+
+            // Debugging Log
+            if (AR_DEBUG) {
+                console.log(`Spawn Arrow: UserHeading=${userCompassHeading.toFixed(0)}, Target=${targetBearing.toFixed(0)}, Diff=${angleDiff.toFixed(0)}`);
+            }
+
+        } catch (e) {
+            console.warn('showNavArrow failed', e);
+        } finally {
+            isSpawningNavArrow = false;
+        }
+    }
+
+    // Update rotasi panah setiap frame agar selalu menunjuk ke target bearing
+    function updateNavArrowRotation(pose) {
+        if (!navArrowObject) return;
+
+        // 1. Ambil data heading terbaru
+        const userCompassHeading = window.__UMS_AR_HEADING || 0;
+        
+        // 2. Tentukan target bearing (apakah untuk belokan atau lurus)
+        let targetBearing = 0;
+        if (navArrowForTurn && navArrowTurnIndex !== null) {
+            // Cari data turn yang sesuai index (kita harus cari ulang dari array turnPoints)
+            const turnData = turnPoints.find(t => t.index === navArrowTurnIndex);
+            if (turnData) targetBearing = turnData.bearing;
+        } else {
+            targetBearing = getNavHeadingFromRoute() || 0;
+        }
+
+        // 3. Hitung selisih sudut
+        let angleDiff = targetBearing - userCompassHeading;
+
+        // Normalisasi -180 s/d 180
+        if (angleDiff > 180) angleDiff -= 360;
+        if (angleDiff < -180) angleDiff += 360;
+
+        // 4. Terapkan Rotasi (Reset dulu ke orientasi kamera, baru putar)
+        // Kita ambil orientasi kamera dari pose saat ini
+        const mat = new THREE.Matrix4().fromArray(pose.transform.matrix);
+        const camQuat = new THREE.Quaternion().setFromRotationMatrix(mat);
+        
+        // Reset rotasi panah menyamai kamera
+        navArrowObject.quaternion.copy(camQuat);
+
+        // Putar sesuai selisih kompas (Negatif karena ThreeJS CCW vs Compass CW)
+        const rotationRad = angleDiff * (Math.PI / 180);
+        navArrowObject.rotateY(-rotationRad);
+    }
+
+    function hideNavArrow() {
+        if (navArrowObject) {
+            try {
+                disposeObject(navArrowObject);
+                arScene.remove(navArrowObject);
+            } catch (e) { console.warn(e); }
+        }
+        navArrowObject = null;
+        navArrowPose = null;
+        navArrowActive = false;
+        navArrowForTurn = false;
+        navArrowTurnIndex = null;
+        navArrowProgressDistance = 0;
+    }
+
+    // advance arrow forward by one step (called when user close enough)
+    function advanceNavArrow(originPose) {
+        if (!navArrowObject) return;
+        // compute forward in camera local: move arrow further -Z relative to originPose
+        const mat = new THREE.Matrix4().fromArray(originPose.transform.matrix);
+
+        // compute current translation from navArrowProgressDistance
+        navArrowProgressDistance += navArrowStepDistance;
+
+        const localPos = new THREE.Vector3(NAV_ARROW_SIDE_OFFSET, 0, -0.6 - navArrowProgressDistance);
+        const worldPos = localPos.applyMatrix4(mat);
+
+        navArrowObject.position.copy(worldPos);
+        navArrowObject.position.y += 0.02;
+    }
+
 
 
     function disposeObject(obj) {
@@ -1147,8 +1278,7 @@ async function initMap() {
         arNavSpheres = [];
 
         // reset buffer state
-        sphereBufferPositions = [];
-        sphereBufferPrepared = false;
+
         lastUserPosForSpawn = null;
         arSphereSpawned = false;
     }
@@ -1192,29 +1322,35 @@ async function initMap() {
             isGroundPlane
             });
 
-            // update reticle: pos & warna / visibilitas sesuai validitas
+            // --- LOGIKA VISUAL RETICLE & TEXT SCANNING (PERBAIKAN FINAL) ---
+
+            // 1. Cek apakah scan sudah selesai (sekali saja seumur hidup sesi AR ini)
             if (isGroundPlane) {
+                initialScanComplete = true;
+            }
+
+            // 2. Kontrol Tampilan Teks (Pemisahan Logika Mutlak)
+            // Jika scan sudah pernah berhasil (initialScanComplete = true), teks HARUS mati.
+            // Jika belum pernah berhasil, teks HARUS nyala.
+            if (arScanningText) {
+                if (initialScanComplete) {
+                    arScanningText.style.display = 'none';
+                } else {
+                    arScanningText.style.display = 'flex';
+                }
+            }
+
+            // 3. Kontrol Visual Reticle (Lingkaran Hijau)
+            if (isGroundPlane) {
+                // Lantai Valid
                 arReticle.visible = true;
                 arReticle.material = arReticle._matValid; // hijau
                 arReticle.matrix.fromArray(pose.transform.matrix);
-
-                if (!arSurfaceDetected) {
-                    arSurfaceDetected = true;
-                    if (arScanningText) arScanningText.style.display = 'none';
-                }
+                arSurfaceDetected = true;
             } else {
-                // plane bukan ground (mungkin dinding) -> reticle merah atau sembunyikan
-                // jika mau tunjukkan reticle merah, uncomment baris di bawah; 
-                // untuk UX lebih aman, kita sembunyikan reticle
+                // Lantai Invalid / Hilang Tracking
                 arReticle.visible = false;
-                // arReticle.visible = true;
-                // arReticle.material = arReticle._matInvalid;
-                // arReticle.matrix.fromArray(pose.transform.matrix);
-                
-                if (arSurfaceDetected) {
-                    arSurfaceDetected = false;
-                    if (arScanningText) arScanningText.style.display = 'flex';
-                }
+                arSurfaceDetected = false;
             }
 
                 // logika spawn bola ketika heading cocok
@@ -1262,16 +1398,28 @@ async function initMap() {
                             return { nextTurn, distToNextTurn };
                         }
 
-                        // --- LOGIKA SPAWN BERTAHAP: cek heading periodik lalu spawn 1-per-1 saat user maju ---
+                        // --- Konsolidasi: 1x per-frame heading check & nav-arrow logic ---
                         const nowMs = (typeof time === 'number') ? time : performance.now();
 
-                        // heading pengguna & heading rute
+                        // heading pengguna & heading rute (hanya deklarasi sekali)
                         const headingNow = (window.__UMS_AR_HEADING ?? arHeading ?? null);
                         const navHeading = getNavHeadingFromRoute();
 
                         if (headingNow != null && navHeading != null) {
                             arTargetHeading = navHeading;
                             const angDiff = shortestAngleDiff(headingNow, arTargetHeading);
+
+                            const WRONG_WAY_THRESHOLD = 100;
+
+                            if (angDiff > WRONG_WAY_THRESHOLD) {
+                                if (wrongWayWarning.style.display === 'none') {
+                                    wrongWayWarning.style.display = 'flex';
+                                }
+                            } else {
+                                if (wrongWayWarning.style.display !== 'none') {
+                                    wrongWayWarning.style.display = 'none';
+                                }
+                            }
 
                             // periodic heading check (hemat resource): setiap HEADING_CHECK_INTERVAL ms
                             if (nowMs - lastHeadingCheckTime >= HEADING_CHECK_INTERVAL) {
@@ -1280,61 +1428,55 @@ async function initMap() {
                                 if (AR_DEBUG) console.log('Heading check:', { angDiff: angDiff.toFixed(1), headingAligned });
                             }
 
-                            // jika ada rute, hitung jarak ke belokan berikutnya
+                            // compute distance to next turn
                             const routeInfo = (typeof distanceAlongRouteFromUser === 'function') ? distanceAlongRouteFromUser() : null;
                             const distToNextTurn = routeInfo ? routeInfo.distToNextTurn : null;
                             const nextTurn = routeInfo ? routeInfo.nextTurn : null;
 
-                            // tentukan jarak total yang ingin kita pandu (spawn buffer), sampai next turn atau default
-                            let intendedGuidanceDist = distToNextTurn != null ? Math.min(distToNextTurn, SPHERE_COUNT_MAX * SPHERE_SPACING) : Math.min(SPHERE_COUNT_MAX * SPHERE_SPACING, 10);
-
-                            // gunakan hanya MAX_BUFFER_SPHERES (5) dan spacing BUFFER_SPHERE_SPACING
-                            intendedGuidanceDist = Math.min(intendedGuidanceDist, MAX_BUFFER_SPHERES * BUFFER_SPHERE_SPACING);
-
-                            // Jika heading sesuai dan belum ada buffer dipersiapkan → prepare buffer & spawn 1 bola pertama
-                            if (headingAligned && !sphereBufferPrepared) {
-                                // bersihkan bola sebelumnya & prepare baru (jika ada)
-                                clearNavigationSpheres();
-                                prepareSphereBuffer(pose, intendedGuidanceDist);
-
-                                // spawn pertama langsung agar user mendapat tanda
-                                if (sphereBufferPrepared) {
-                                    spawnNextBufferedSphere();
-                                    arSphereSpawned = true;
-                                    if (AR_DEBUG) console.log('Prepared buffer and spawned first sphere (buffer size)', sphereBufferPositions.length);
-                                }
-                            }
-
-                            // jika buffer sudah dipersiapkan, spawn bola selanjutnya saat user sudah maju SPAWN_TRIGGER_DISTANCE
-                            if (sphereBufferPrepared) {
-                                // pastikan kita punya posisi user sebelumnya untuk perbandingan
-                                if (lastUserPosForSpawn && userPosition) {
-                                    const moved = haversineDistance(lastUserPosForSpawn.lat, lastUserPosForSpawn.lng, userPosition.lat(), userPosition.lng());
-                                    if (moved >= SPAWN_TRIGGER_DISTANCE) {
-                                        const ok = spawnNextBufferedSphere();
-                                        if (ok && AR_DEBUG) console.log('Spawned next buffered sphere after user moved', moved.toFixed(2), 'm');
-                                    }
-                                } else {
-                                    // jika belum ada reference lastUserPosForSpawn tapi buffer ada, set lastUserPosForSpawn sekarang
-                                    if (userPosition && !lastUserPosForSpawn) {
-                                        lastUserPosForSpawn = { lat: userPosition.lat(), lng: userPosition.lng() };
-                                    }
-                                }
-                            }
-
-                            // Spawn arrow when approaching turn (sama seperti sebelumnya)
+                            // If approaching a turn, show turn arrow instead (replace nav arrow)
                             if (nextTurn && distToNextTurn <= AR_ARROW_SPAWN_DISTANCE) {
-                                const arrowAlready = arNavSpheres.some(s => s.userData && s.userData.isTurnArrow && s.userData.turnIndex === nextTurn.index);
-                                if (!arrowAlready) {
+                                if (!navArrowForTurn || navArrowTurnIndex !== nextTurn.index) {
+                                    hideNavArrow();
                                     spawnTurnArrow(pose, nextTurn);
-                                    if (AR_DEBUG) console.log('spawned arrow for turn', nextTurn);
+                                    if (AR_DEBUG) console.log('show turn arrow for turn', nextTurn.index);
+                                }
+                            } else {
+                                // If heading aligned and nav arrow not active -> show initial nav arrow at side
+                                // TAMBAHKAN: && !isSpawningNavArrow
+                                if (headingAligned && !navArrowActive && !isSpawningNavArrow) {
+                                    showNavArrow(pose, false, null);
+                                    if (AR_DEBUG) console.log('showNavArrow linear');
+                                }
+
+                                // Jika panah navigasi aktif -> Cek jarak untuk memajukan panah (TANPA ANIMASI NAIK-TURUN)
+                                if (navArrowActive && !navArrowForTurn && navArrowObject) {
+                                    
+                                    // 1. (Opsional) Pastikan panah tetap di ketinggian awal agar tidak bergeser tidak sengaja
+                                    const baseY = navArrowObject.userData.baseY; 
+                                    if (baseY !== undefined) {
+                                        navArrowObject.position.y = baseY;
+                                    }
+                                    updateNavArrowRotation(pose);
+
+                                    // 2. Cek jarak antara kamera (user) dan panah
+                                    const camWorldPos = new THREE.Vector3();
+                                    arCamera.getWorldPosition(camWorldPos);
+                                    const arrowWorldPos = navArrowObject.position;
+                                    const dist = camWorldPos.distanceTo(arrowWorldPos);
+
+                                    // 3. Jika user sudah dekat (<= 1.2 meter), majukan panah
+                                    if (dist <= NAV_ARROW_PROXIMITY) {
+                                        advanceNavArrow(pose);
+                                        if (AR_DEBUG) console.log('advanceNavArrow: advanced by', navArrowStepDistance, 'm');
+                                    }
                                 }
                             }
+
                         } else {
-                            // kalau heading belum tersedia -> jangan spawn
                             if (AR_DEBUG && !headingNow) console.log('spawn skip: headingNow null');
                             if (AR_DEBUG && !navHeading) console.log('spawn skip: navHeading null');
                         }
+
 
 
                     } else {
@@ -1344,9 +1486,6 @@ async function initMap() {
                     }
 
                 }
-
-
-                // === akhir logika spawn bola ===
 
             } else {
                 arReticle.visible = false;
@@ -1375,7 +1514,7 @@ async function initMap() {
                     const alpha = 0.5 + 0.5 * Math.sin(tSec * Math.PI * 2 * speed + offset);
                     // optional: ramp minimum visibility (so it never fully disappears)
                     const minAlpha = 0.25;
-                    s.material.opacity = Math.max(minAlpha, alpha);
+                    //s.material.opacity = Math.max(minAlpha, alpha);
                 }
             }
         } catch (e) {
@@ -1384,8 +1523,6 @@ async function initMap() {
 
         arRenderer.render(arScene, arCamera);
     }
-
-
 
 
     async function switchToAR() {
