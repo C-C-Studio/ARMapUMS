@@ -25,6 +25,7 @@ export async function createRoute(map, destLat, destLon, destName) {
     state.snapBackTimer = null;
     state.isNavigating = false;     
     state.wasNavigating = false;  
+    state.isPreviewingRoute = true;
 
     if (!state.isUserOnCampusFlag) {
         alert("Fitur rute hanya dapat digunakan saat Anda berada di area kampus UMS.");
@@ -38,12 +39,27 @@ export async function createRoute(map, destLat, destLon, destName) {
     const startLng = state.userLocation[0];
     const startLat = state.userLocation[1];
 
+    // Hapus layer rute lama jika ada
     if (map.getLayer('route')) map.removeLayer('route');
     if (map.getSource('route')) map.removeSource('route');
     
-    elements.startNavBtn.style.display = 'none';
+    // Sembunyikan Kompas & Indikator Derajat
+    if (elements.compassIndicator) elements.compassIndicator.style.display = 'none';
+    if (elements.degreeIndicator) elements.degreeIndicator.style.display = 'none';
+
+    // Sembunyikan Tombol Locate & AR
+    if (elements.locateButton) elements.locateButton.style.display = 'none';
+    if (elements.arButton) elements.arButton.style.display = 'none';
+
+    elements.startNavBtn.style.display = 'flex';
+    // elements.startNavBtn.style.display = 'none';
     elements.cancelNavBtn.style.display = 'none';
     elements.snapToRoadBtn.style.display = 'none';
+    if (elements.distanceIndicator) {
+        elements.distanceIndicator.style.display = 'none';
+    }
+    if (elements.routeInfoPanel) elements.routeInfoPanel.classList.add('translate-y-full');
+    if (elements.bottomNavbar) elements.bottomNavbar.classList.add('translate-y-full');
 
     state.isSnapToRoadActive = false;
     elements.snapToRoadBtn.classList.remove('bg-blue-500');
@@ -60,7 +76,8 @@ export async function createRoute(map, destLat, destLon, destName) {
         const data = await response.json();
 
         if (data.routes && data.routes.length > 0) {
-            const routeGeoJSON = data.routes[0].geometry;
+            const route = data.routes[0];
+            const routeGeoJSON = route.geometry;
 
             map.addSource('route', {
                 type: 'geojson',
@@ -77,16 +94,52 @@ export async function createRoute(map, destLat, destLon, destName) {
 
             state.currentRouteLine = routeGeoJSON;
 
+            // Fit Bounds (Zoom ke rute)
             const coordinates = routeGeoJSON.coordinates;
-            const bounds = coordinates.reduce((bounds, coord) => {
-                return bounds.extend(coord);
-            }, new maplibregl.LngLatBounds(coordinates[0], coordinates[0]));
+            const bounds = coordinates.reduce((bounds, coord) => bounds.extend(coord), new maplibregl.LngLatBounds(coordinates[0], coordinates[0]));
+            
+            // 1. Hentikan paksa animasi kamera "Follow User"
+            map.stop();
 
-            map.fitBounds(bounds, { padding: 40 });
-            elements.startNavBtn.style.display = 'flex';
+            // 2. Reset kamera ke mode 2D (Tegak) dan Utara secara INSTAN.
+            // Ini penting agar kalkulasi fitBounds tidak kacau karena kemiringan 60 derajat.
+            map.jumpTo({ 
+                pitch: 0, 
+                bearing: 0,
+                padding: { top: 0, bottom: 0, left: 0, right: 0 } // Reset padding lama
+            });
+
+            // 3. Lakukan Fit Bounds dengan animasi halus
+            // Beri sedikit delay (10ms) untuk memastikan jumpTo selesai diproses
+            setTimeout(() => {
+                map.fitBounds(bounds, { 
+                    // Padding: Bottom 320px memberi ruang untuk panel putih di bawah
+                    padding: { top: 80, bottom: 260, left: 50, right: 50 }, 
+                    pitch: 0,
+                    bearing: 0,
+                    duration: 1500 // Durasi animasi zoom out ke rute
+                });
+            }, 10);
+
+            // elements.startNavBtn.style.display = 'flex';
+            // 1. Isi Nama Tujuan
+            if (elements.routeDestName) elements.routeDestName.textContent = destName;
+
+            // 2. Isi Jarak (dari API Mapbox, satuan meter)
+            const distanceKm = (route.distance / 1000).toFixed(1);
+            if (elements.routeDestDistance) elements.routeDestDistance.textContent = `${distanceKm} km`;
+
+            // 3. Isi Waktu (dari API Mapbox, satuan detik)
+            const durationMin = Math.round(route.duration / 60);
+            if (elements.routeDestTime) elements.routeDestTime.textContent = `${durationMin} min`;
+
+            // 4. Munculkan Panel (Slide Up)
+            if (elements.routeInfoPanel) elements.routeInfoPanel.classList.remove('translate-y-full');
 
         } else {
             alert("Tidak dapat menemukan rute.");
+            // Kembalikan navbar jika gagal
+            if (elements.bottomNavbar) elements.bottomNavbar.classList.remove('translate-y-full');
         }
     } catch (error) {
         console.error('Error fetching route:', error);
@@ -111,10 +164,19 @@ export function handleRouteRequest(lat, lon, nama) {
 function startNavigationMode() {
     state.isNavigating = true;
     state.wasNavigating = false; 
+    state.isPreviewingRoute = false;
     
-    elements.startNavBtn.style.display = 'none';
+    if (elements.routeInfoPanel) elements.routeInfoPanel.classList.add('translate-y-full');
+    // elements.startNavBtn.style.display = 'none';
     elements.cancelNavBtn.style.display = 'flex';
     elements.snapToRoadBtn.style.display = 'flex';
+    // Munculkan kembali Tombol Locate & AR
+    if (elements.locateButton) elements.locateButton.style.display = 'flex';
+    if (elements.arButton) elements.arButton.style.display = 'flex';
+
+    if (elements.distanceIndicator) {
+        elements.distanceIndicator.style.display = 'flex';
+    }
 
     if (elements.bottomNavbar) {
         elements.bottomNavbar.classList.add('translate-y-full');
@@ -125,7 +187,8 @@ function startNavigationMode() {
             center: state.userLocation,
             pitch: 60,
             zoom: 19,
-            duration: 1000
+            duration: 1000,
+            padding: { top: 300 }
         });
         // Paksa geolocate mode jika perlu (opsional karena kita handle manual camera follow)
     } else {
@@ -136,13 +199,20 @@ function startNavigationMode() {
 export function cancelNavigationMode() {
     state.isNavigating = false;
     state.wasNavigating = false; 
+    state.isPreviewingRoute = false;
+
     clearTimeout(state.snapBackTimer);
     state.snapBackTimer = null;
     state.currentRouteLine = null;
-
-    elements.startNavBtn.style.display = 'none';
+    
+    if (elements.routeInfoPanel) elements.routeInfoPanel.classList.add('translate-y-full');
+    // elements.startNavBtn.style.display = 'none';
     elements.cancelNavBtn.style.display = 'none';
     elements.snapToRoadBtn.style.display = 'none';
+    if (elements.distanceIndicator) {
+        elements.distanceIndicator.style.display = 'none';
+        if (elements.distanceText) elements.distanceText.innerText = "0 m";
+    }
     
     // Reset Snap UI
     state.isSnapToRoadActive = false;
@@ -161,7 +231,8 @@ export function cancelNavigationMode() {
         zoom: 16.5,
         pitch: 45,
         bearing: -17.6,
-        duration: 1000
+        duration: 1000,
+        padding: { top: 0, bottom: 0, left: 0, right: 0 }
     });
 }
 

@@ -11,6 +11,7 @@ export const state = {
     // Navigasi
     isNavigating: false,
     wasNavigating: false,
+    isPreviewingRoute: false,
     snapBackTimer: null,
     currentRouteLine: null, // Untuk Snap-to-Road
     isSnapToRoadActive: false, // Default mati
@@ -32,12 +33,22 @@ export const config = {
 
 // Referensi Elemen DOM Global (yang sering dipakai)
 export const elements = {
+    routeInfoPanel: document.getElementById('route-info-panel'),
+    routeDestName: document.getElementById('route-dest-name'),
+    routeDestDistance: document.getElementById('route-dest-distance'),
+    routeDestTime: document.getElementById('route-dest-time'),
+    
     startNavBtn: document.getElementById('start-nav-btn'),
     cancelNavBtn: document.getElementById('cancel-nav-btn'),
     snapToRoadBtn: document.getElementById('snap-to-road-btn'),
+
+    distanceIndicator: document.getElementById('distance-indicator'),
+    distanceText: document.getElementById('distance-text'),
+
     compassIndicator: document.getElementById('compass-indicator'),
     compassNeedle: document.getElementById('compass-needle'),
     degreeIndicator: document.getElementById('degree-indicator'),
+
     bottomNavbar: document.getElementById('bottom-navbar'),
     arContainer: document.getElementById('ar-container'),
     arButton: document.getElementById('ar-btn'),
