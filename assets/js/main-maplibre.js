@@ -6,6 +6,9 @@ import { loadMapData } from './features-maplibre/data-loader.js';
 import { setupGeolocation } from './features-maplibre/geolocation.js';
 import { setupNavigation } from './features-maplibre/navigation.js';
 import { setupUI } from './features-maplibre/ui-controls.js';
+// Import modul AR
+import { startARSession, endARSession } from './features-maplibre/ar-navigation.js';
+import { elements } from './features-maplibre/state.js';
 
 // 1. Inisialisasi Peta
 const map = initMap();
@@ -20,21 +23,30 @@ const geolocate = new maplibregl.GeolocateControl({
 map.addControl(geolocate); // Tambahkan tanpa UI default (karena kita punya tombol custom)
 
 // 3. Jalankan Fitur-Fitur saat Peta siap
+// ... imports ...
+
 map.on('load', () => {
     console.log("Map Loaded. Initializing features...");
 
-    // Load Data (Marker & Path)
     loadMapData(map);
-
-    // Setup UI (Search, Navbar)
     setupUI(map);
-
-    // Setup Geolocation (User Marker, Compass, Locate Button)
     setupGeolocation(map, geolocate);
-
-    // Setup Navigation (Routing, Snap to Road, Start/Cancel Btns)
     setupNavigation(map, geolocate);
 
-    // Trigger awal lokasi
-    // geolocate.trigger();
+    // --- PERBAIKAN DI SINI ---
+    
+    // HAPUS listener ganda yang lama. Gunakan HANYA SATU listener ini:
+    
+    // 1. Listener Tombol Masuk AR
+    elements.arButton.addEventListener('click', (e) => {
+        e.preventDefault(); // Mencegah refresh halaman
+        console.log("Tombol AR ditekan, memulai sesi...");
+        startARSession();
+    });
+
+    // 2. Listener Tombol Keluar AR
+    elements.closeArButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        endARSession();
+    });
 });

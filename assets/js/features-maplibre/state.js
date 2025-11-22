@@ -22,6 +22,12 @@ export const state = {
     correctedNeedleHeading: 0,
     correctedConeHeading: 0,
     userMarker: null, // Object Marker MapLibre
+
+    // Augmented Reality (AR)
+    isArActive: false,
+    arMiniMap: null,
+    arRouteLine: null, // Menyimpan rute yang diproses untuk AR
+    arHeading: 0,      // Heading khusus AR
 };
 
 // Konstanta konfigurasi

@@ -1339,7 +1339,6 @@ async function initMap() {
                     arScanningText.style.display = 'flex';
                 }
             }
-
             // 3. Kontrol Visual Reticle (Lingkaran Hijau)
             if (isGroundPlane) {
                 // Lantai Valid
@@ -1352,7 +1351,6 @@ async function initMap() {
                 arReticle.visible = false;
                 arSurfaceDetected = false;
             }
-
                 // logika spawn bola ketika heading cocok
                 // === LOGIKA SPAWN BOLA BERDASARKAN ARAH NAVIGASI ===
 
@@ -1420,14 +1418,12 @@ async function initMap() {
                                     wrongWayWarning.style.display = 'none';
                                 }
                             }
-
                             // periodic heading check (hemat resource): setiap HEADING_CHECK_INTERVAL ms
                             if (nowMs - lastHeadingCheckTime >= HEADING_CHECK_INTERVAL) {
                                 headingAligned = (angDiff <= AR_ANGLE_THRESHOLD);
                                 lastHeadingCheckTime = nowMs;
                                 if (AR_DEBUG) console.log('Heading check:', { angDiff: angDiff.toFixed(1), headingAligned });
                             }
-
                             // compute distance to next turn
                             const routeInfo = (typeof distanceAlongRouteFromUser === 'function') ? distanceAlongRouteFromUser() : null;
                             const distToNextTurn = routeInfo ? routeInfo.distToNextTurn : null;
@@ -1471,22 +1467,16 @@ async function initMap() {
                                     }
                                 }
                             }
-
                         } else {
                             if (AR_DEBUG && !headingNow) console.log('spawn skip: headingNow null');
                             if (AR_DEBUG && !navHeading) console.log('spawn skip: navHeading null');
                         }
-
-
-
                     } else {
                         // opsional: log kenapa tidak spawn
                         if (!isGroundPlane) if (AR_DEBUG) console.log('spawn skip: plane bukan ground (angle > threshold)');
                         if (!arReticle.visible) if (AR_DEBUG) console.log('spawn skip: reticle tidak terlihat');
                     }
-
                 }
-
             } else {
                 arReticle.visible = false;
                 if (arSurfaceDetected) {
