@@ -21,52 +21,22 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-        }
-        ::placeholder {
-            color: #9ca3af;
-        }
-        .custom-marker {
-            /* ... style Anda ... */
-        }
-        .maplibregl-popup-content {
-            background: none;
-            box-shadow: none;
-            padding: 0;
-        }
-        .user-location-marker { 
-            position: relative; 
-            width: 22px; 
-            height: 22px; 
-            /* transform: translate(-50%, -50%); (Ini tidak perlu jika anchor di set) */
-            pointer-events: none; 
-        }
+        body { font-family: 'Inter', sans-serif; }
+        ::placeholder { color: #9ca3af; }
+        .maplibregl-popup-content { background: none; box-shadow: none; padding: 0; }
+        
+        /* Style Marker User */
+        .user-location-marker { position: relative; width: 22px; height: 22px; pointer-events: none; }
         .user-location-dot { 
-            width: 18px; 
-            height: 18px; 
-            border-radius: 50%; 
-            background-color: #1a73e8; 
-            border: 2px solid white; 
-            box-shadow: 0 0 5px rgba(0,0,0,0.4); 
-            position: absolute; 
-            top: 50%; 
-            left: 50%; 
-            transform: translate(-50%, -50%); 
-            z-index: 2; 
+            width: 18px; height: 18px; border-radius: 50%; background-color: #1a73e8; 
+            border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.4); 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2; 
         }
         .user-location-heading { 
-            width: 60px; 
-            height: 60px; 
-            position: absolute; 
-            top: 50%; 
-            left: 50%; 
-            transform: translate(-50%, -50%) rotate(0deg); 
-            transform-origin: center center; 
+            width: 60px; height: 60px; position: absolute; top: 50%; left: 50%; 
+            transform: translate(-50%, -50%) rotate(0deg); transform-origin: center center; 
             background: conic-gradient( from 300deg at 50% 50%, #1a73e84D 0deg, #1a73e84D 120deg, transparent 120.1deg, transparent 360deg ); 
-            border-radius: 50%; 
-            z-index: 1; 
-            transition: transform 0.2s ease-out; 
+            border-radius: 50%; z-index: 1; transition: transform 0.2s ease-out; 
         }
     </style>
 </head>
@@ -75,7 +45,8 @@
     <div class="w-full max-w-md mx-auto h-[100dvh] md:h-[90vh] md:max-h-[800px] bg-white shadow-xl relative overflow-hidden md:rounded-3xl">
         
         <div id="map" class="absolute top-0 left-0 right-0 bottom-0 z-0"></div>
-        <button id="debug-teleport-btn" class="absolute top-24 left-4 z-50 bg-gray-800 text-white px-4 py-3 rounded-xl shadow-lg font-bold text-xs flex items-center gap-2 border-2 border-white">
+
+        <button id="debug-teleport-btn" class="absolute top-24 left-4 z-50 bg-gray-800 text-white px-4 py-3 rounded-xl shadow-lg font-bold text-xs flex items-center gap-2 border-2 border-white" style="display: flex;">
             <i class="fas fa-magic"></i> MODE TELEPORT
         </button>
 
@@ -108,7 +79,6 @@
         
         <div id="degree-indicator" class="absolute top-48 left-5 z-10 w-20 p-2 rounded-lg bg-white/80 backdrop-blur-sm shadow-lg flex justify-center items-center text-gray-800 font-bold text-lg" style="display: none;">0°</div>
         
-
         <header class="absolute top-0 left-0 right-0 z-10 text-white flex justify-center items-center p-5 bg-gradient-to-b from-black/60 to-transparent">
             <img src="assets/images/Resmi_Logo_UMS_White_ShortText.png" alt="logo" class="h-8 mt-2">
             <button id="open-search-btn" class="text-xl absolute right-5" title="Search locations">
@@ -167,15 +137,12 @@
         </div>
 
         <div class="absolute mb-12 bottom-52 right-6 z-10 flex flex-col gap-3">
-            
             <button id="cancel-nav-btn" title="Cancel Navigation" class="bg-red-500 text-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-xl" style="display: none;">
                 <i class="fas fa-times"></i>
             </button>
-
             <button id="snap-to-road-btn" title="Snap to Road (Nonaktif)" class="bg-gray-500 text-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-xl" style="display: none;">
                 <i class="fas fa-road"></i>
             </button>
-
         </div>
 
         <button type="button" id="ar-btn" title="Enter AR Mode" class="absolute mb-12 bottom-36 right-6 z-10 bg-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-gray-700 text-xl">
@@ -191,22 +158,18 @@
                 <i class="fas fa-home text-xl mb-1"></i>
                 <span class="text-xs">Beranda</span>
             </a>
-
             <a href="maps.html" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
                 <i class="fas fa-map-location-dot text-xl mb-1"></i>
                 <span class="text-xs font-bold">Leaflet</span>
             </a>
-
             <a href="maplibre.html" class="flex flex-col items-center justify-center text-white w-1/4">
                 <i class="fas fa-map-location-dot text-xl mb-1"></i>
                 <span class="text-xs">Maplibre</span>
             </a>
-
             <a href="google-maps.html" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
                 <i class="fas fa-map-location-dot text-xl mb-1"></i>
                 <span class="text-xs">Google</span>
             </a>
-
             <a href="#" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
                 <i class="fas fa-cog text-xl mb-1"></i>
                 <span class="text-xs">Pengaturan</span>
