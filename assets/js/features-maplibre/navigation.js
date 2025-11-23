@@ -277,3 +277,59 @@ function startSnapBackTimer() {
         }, 4000); 
     }
 }
+
+// ==========================================
+// 🛠️ FITUR DEBUGGING: TAP-TO-TELEPORT
+// ==========================================
+
+export function setupTeleportDebug(map) {
+    const btn = document.getElementById('debug-teleport-btn');
+    if (!btn) return;
+
+    let isDebugMode = false;
+
+    // 1. Toggle Mode
+    btn.addEventListener('click', () => {
+        isDebugMode = !isDebugMode;
+        
+        if (isDebugMode) {
+            btn.classList.replace('bg-gray-800', 'bg-green-600');
+            btn.innerHTML = '<i class="fas fa-map-pin"></i> KLIK PETA UNTUK PINDAH';
+            alert("Mode Teleport Aktif! \nSilakan klik/tap di mana saja pada garis rute untuk memindahkan posisi Anda secara instan.");
+        } else {
+            btn.classList.replace('bg-green-600', 'bg-gray-800');
+            btn.innerHTML = '<i class="fas fa-magic"></i> MODE TELEPORT';
+        }
+    });
+
+    // 2. Listener Klik Peta (Hanya jalan jika mode aktif)
+    map.on('click', (e) => {
+        if (!isDebugMode) return;
+
+        const clickedLngLat = [e.lngLat.lng, e.lngLat.lat];
+
+        // Opsional: Snap ke garis rute agar akurat (jika rute ada)
+        let finalLocation = clickedLngLat;
+        if (state.currentRouteLine) {
+            const pt = turf.point(clickedLngLat);
+            const snapped = turf.nearestPointOnLine(state.currentRouteLine, pt);
+            finalLocation = snapped.geometry.coordinates;
+        }
+
+        console.log("📍 Teleport ke:", finalLocation);
+
+        // A. Update State Utama
+        state.userLocation = finalLocation;
+
+        // B. Update Visual Marker 2D
+        if (state.userMarker) {
+            state.userMarker.setLngLat(finalLocation);
+        }
+
+        // C. Update Posisi Kamera Peta
+        map.easeTo({ center: finalLocation, duration: 300 });
+
+        // D. (PENTING) Logika AR Navigasi otomatis membaca 'state.userLocation'
+        // Jadi panah AR akan langsung berubah saat Anda klik.
+    });
+}

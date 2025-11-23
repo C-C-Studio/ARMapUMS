@@ -3,7 +3,11 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { state, elements, config } from './state.js';
 
 // --- KONFIGURASI ---
-const AR_NAV_ARROW_URL = 'assets/3DModel/arrow.glb';
+// 1. Model untuk HUD (Kompas yang melayang di layar)
+const AR_HUD_ARROW_URL = 'assets/3DModel/arrow.glb'; 
+
+// 2. Model untuk GROUND (Panah besar saat belokan) - Ganti dengan nama file baru Anda
+const AR_TURN_ARROW_URL = 'assets/3DModel/turn-arrow.glb';
 const AR_DEBUG = true;
 
 // Offset Rotasi Model (Sesuaikan jika model miring)
@@ -25,6 +29,8 @@ let gltfLoader = new GLTFLoader();
 // --- OBJEK AR ---
 let hudArrowObject = null;   // Panah Kompas (Melayang)
 let groundArrowObject = null; // Panah Belokan (Nempel Tanah)
+let isGroundArrowPlaced = false;
+const GROUND_ARROW_SPAWN_DIST = 4.0;
 
 // State Logic
 let isTurnActive = false;     // Apakah sedang dekat belokan?
@@ -128,48 +134,59 @@ function initARRenderer() {
 }
 
 function loadArrows() {
-    gltfLoader.load(AR_NAV_ARROW_URL, (gltf) => {
-        // 1. Setup HUD Arrow (Kompas)
-        hudArrowObject = gltf.scene.clone();
-        
+    // ==========================================
+    // 1. LOAD HUD ARROW (KOMPAS)
+    // ==========================================
+    gltfLoader.load(AR_HUD_ARROW_URL, (gltf) => {
+        hudArrowObject = gltf.scene; // Tidak perlu clone() karena file khusus
+
+        // Setup Khusus HUD (Material Merah & Overlay)
         hudArrowObject.traverse((child) => {
             if (child.isMesh) {
-                // --- PERBAIKAN 3: Setup Material Merah & Asli ---
-                
-                // A. Simpan Material Asli (Agar bisa dikembalikan nanti)
+                // A. Simpan Material Asli
                 child.userData.originalMaterial = child.material;
 
                 // B. Buat Material Merah (Khusus saat salah arah)
                 child.userData.redMaterial = new THREE.MeshBasicMaterial({
                     color: 0xff0000, // Merah Terang
-                    depthTest: false, // Tetap HUD (Overlay)
+                    depthTest: false,
                     depthWrite: false
                 });
 
-                // C. Setting Default (HUD Mode)
+                // C. Setting agar selalu muncul di atas (Overlay)
                 child.material.depthTest = false; 
                 child.material.depthWrite = false;
                 child.renderOrder = 999; 
             }
         });
 
+        // Ukuran Kecil untuk UI
         hudArrowObject.scale.set(0.08, 0.08, 0.08); 
         
-        // Tempel ke Kamera
+        // Tempel ke KAMERA (Agar ikut gerakan kepala/UI)
         arCamera.add(hudArrowObject); 
         
         // Posisi LOKAL (Relatif layar)
         hudArrowObject.position.set(0, -0.15, -0.8); 
         
-        // Flag untuk melacak status warna saat ini (agar tidak ganti warna tiap frame)
+        // Flag status warna
         hudArrowObject.userData.isRed = false;
-
         hudArrowObject.visible = false; 
+    });
 
-        // 2. Setup Ground Arrow (Tetap normal)
-        groundArrowObject = gltf.scene.clone();
+
+    // ==========================================
+    // 2. LOAD GROUND ARROW (BELOKAN)
+    // ==========================================
+    gltfLoader.load(AR_TURN_ARROW_URL, (gltf) => {
+        groundArrowObject = gltf.scene; // Tidak perlu clone()
+
+        // Ukuran Besar untuk di Jalan
         groundArrowObject.scale.set(0.8, 0.8, 0.8); 
+        
         groundArrowObject.visible = false;
+        
+        // Tempel ke SCENE (Agar menempel di dunia nyata/tanah)
         arScene.add(groundArrowObject);
     });
 }
@@ -205,7 +222,10 @@ export async function startARSession() {
         arLocalSpace = refSpace;
         arHitTestSource = await session.requestHitTestSource({ space: viewerSpace });
         
-        session.addEventListener("end", endARSession);
+        session.addEventListener("end", () => {
+            // Panggil fungsi pembersih kita saat sistem mematikan AR
+            endARSession();
+        });
         arRenderer.setAnimationLoop(onARFrame);
     } catch (e) {
         console.error(e);
@@ -214,38 +234,75 @@ export async function startARSession() {
 }
 
 export function endARSession() {
-    if (arSession) { arSession.end(); arSession = null; }
+    // 1. Hentikan Sesi WebXR jika masih berjalan
+    if (arSession) {
+        try {
+            arSession.end();
+        } catch (e) {
+            console.warn("Sesi sudah berakhir oleh sistem:", e);
+        }
+        arSession = null;
+    }
     
+    // 2. Reset UI HTML
     elements.arContainer.style.display = 'none';
     elements.arButton.style.display = 'flex';
     elements.closeArButton.style.display = 'none';
-    if (!state.isNavigating) elements.bottomNavbar.classList.remove('translate-y-full');
     
-    arRenderer.setAnimationLoop(null);
-}
-
-// --- LOGIKA LOOP UTAMA ---
-function onARFrame(time, frame) {
-    const session = frame.session;
-    if (!session) return;
-
-    // A. Update Mini Map
-    if (state.arMiniMap && state.userLocation) {
-        state.arMiniMap.setCenter(state.userLocation);
-        state.arMiniMap.setBearing(state.smoothedAlpha || 0);
-        if (arMiniUserMarker) arMiniUserMarker.setLngLat(state.userLocation);
+    if (arScanningText) arScanningText.style.display = 'none';
+    if (arWrongWay) arWrongWay.style.display = 'none';
+    if (arDangerScreen) arDangerScreen.style.display = 'none';
+    
+    // Kembalikan Navbar jika tidak sedang navigasi
+    if (!state.isNavigating) {
+        elements.bottomNavbar.classList.remove('translate-y-full');
+    }
+    
+    // 3. Hentikan Loop Render
+    if (arRenderer) {
+        arRenderer.setAnimationLoop(null);
     }
 
-    // B. Logika Navigasi Cerdas (Check Turn)
-    checkNavigationStatus();
+    // ==========================================
+    // 🧹 PEMBERSIHAN OBJEK 3D (RESET TOTAL)
+    // ==========================================
 
-    // C. Update HUD Arrow (Kompas Melayang)
-    updateHUDArrow();
+    // A. Reset HUD ARROW (Kompas)
+    if (hudArrowObject) {
+        hudArrowObject.visible = false; // Sembunyikan
+        
+        // Kembalikan warna ke ASLI jika sedang Merah
+        if (hudArrowObject.userData.isRed) {
+            hudArrowObject.traverse((child) => {
+                if (child.isMesh && child.userData.originalMaterial) {
+                    child.material = child.userData.originalMaterial;
+                }
+            });
+            hudArrowObject.userData.isRed = false;
+        }
+        
+        // Reset rotasi agar saat mulai lagi tidak miring aneh
+        hudArrowObject.rotation.set(0, 0, 0); 
+    }
 
-    // D. Update Ground Arrow (Hanya jika Belokan)
-    updateGroundArrow(frame);
+    // B. Reset GROUND ARROW (Panah Belokan)
+    if (groundArrowObject) {
+        groundArrowObject.visible = false; // Sembunyikan
+        groundArrowObject.position.set(0, 0, 0); // Reset posisi (opsional)
+    }
 
-    arRenderer.render(arScene, arCamera);
+    // C. Reset Reticle
+    if (arReticle) {
+        arReticle.visible = false;
+    }
+
+    // D. Reset VARIABEL STATE (Penting!)
+    isGroundArrowPlaced = false;  // Agar panah bisa ditancapkan lagi nanti
+    isTurnActive = false;         // Reset status belokan
+    turnBearing = 0;
+    initialScanComplete = false;
+    
+    console.log("🧹 AR Session Cleaned Up.");
 }
 
 // --- 1. LOGIKA TURF.JS: Deteksi Belokan ---
@@ -255,43 +312,48 @@ function checkNavigationStatus() {
     const userPt = turf.point(state.userLocation);
     const line = state.currentRouteLine;
 
-    // Cari posisi user di garis
     const snapped = turf.nearestPointOnLine(line, userPt);
     const currentIdx = snapped.properties.index;
     const coords = line.coordinates;
 
-    isTurnActive = false; // Reset status
+    // Flag sementara untuk loop ini
+    let turnFoundInLoop = false;
 
-    // Scan 2-3 titik ke depan untuk cari sudut tajam
+    // Scan 2-3 titik ke depan
     for (let i = currentIdx; i < Math.min(currentIdx + 3, coords.length - 2); i++) {
         const p1 = coords[i];
-        const p2 = coords[i+1]; // Titik sudut
+        const p2 = coords[i+1];
         const p3 = coords[i+2];
 
-        // Hitung Sudut
         const bearing1 = turf.bearing(turf.point(p1), turf.point(p2));
         const bearing2 = turf.bearing(turf.point(p2), turf.point(p3));
         let angleDiff = Math.abs(bearing1 - bearing2);
         if (angleDiff > 180) angleDiff = 360 - angleDiff;
 
-        // Jika Sudut Tajam (> 30 derajat)
         if (angleDiff > TURN_ANGLE_THRESHOLD) {
-            // Hitung jarak ke belokan tersebut
             const distToTurn = turf.distance(userPt, turf.point(p2), { units: 'kilometers' }) * 1000;
 
-            // Jika dekat (< 15 meter)
             if (distToTurn < TURN_DISTANCE_THRESHOLD) {
-                isTurnActive = true;
-                
-                // Simpan arah tujuan SETELAH belok untuk panah ground
-                // Agar panah ground menunjuk ke jalan yang harus diambil
-                turnBearing = (bearing2 + 360) % 360; 
-                
-                // Debugging
-                if (AR_DEBUG) console.log(`BELOKAN TERDETEKSI: ${distToTurn.toFixed(1)}m, Arah: ${turnBearing.toFixed(0)}`);
-                return; // Selesai, prioritas belokan
+                // KITA MENEMUKAN BELOKAN AKTIF
+                if (!isTurnActive) {
+                    // Jika baru saja masuk zona belokan, reset flag placement
+                    isTurnActive = true;
+                    isGroundArrowPlaced = false; 
+                    turnBearing = (bearing2 + 360) % 360; 
+                    if (AR_DEBUG) console.log(`ZONE BELOKAN: ${distToTurn.toFixed(1)}m`);
+                }
+                turnFoundInLoop = true;
+                return; 
             }
         }
+    }
+
+    // Jika loop selesai dan TIDAK ada belokan dekat, reset semuanya
+    if (!turnFoundInLoop && isTurnActive) {
+        isTurnActive = false;
+        isGroundArrowPlaced = false; // Reset agar siap untuk belokan berikutnya
+        if (groundArrowObject) groundArrowObject.visible = false;
+        if (arReticle) arReticle.visible = false;
     }
 }
 
@@ -384,11 +446,11 @@ function updateHUDArrow() {
     }
 }
 
-// --- 3. GROUND ARROW (Hanya Saat Belok) ---
+// --- 3. GROUND ARROW (Spawn & Lock) ---
 function updateGroundArrow(frame) {
     if (!groundArrowObject || !arHitTestSource) return;
 
-    // Jika TIDAK ada belokan dekat -> Sembunyikan Ground Arrow
+    // A. Jika tidak ada belokan, sembunyikan semua
     if (!isTurnActive) {
         groundArrowObject.visible = false;
         arReticle.visible = false;
@@ -396,48 +458,82 @@ function updateGroundArrow(frame) {
         return;
     }
 
-    // Jika ADA belokan -> Lakukan Hit Test untuk spawn panah di lantai
+    // B. JIKA PANAH SUDAH TERTANCAP (LOCKED)
+    // Jangan lakukan apa-apa lagi! Biarkan dia diam di koordinat dunia.
+    if (isGroundArrowPlaced) {
+        groundArrowObject.visible = true; 
+        arReticle.visible = false; // Sembunyikan reticle karena sudah selesai
+        if (arScanningText) arScanningText.style.display = 'none';
+        return; 
+    }
+
+    // C. JIKA BELUM TERTANCAP -> CARI LANTAI (SCANNING)
     const hitTestResults = frame.getHitTestResults(arHitTestSource);
     if (hitTestResults.length > 0) {
         const hit = hitTestResults[0];
         const pose = hit.getPose(arLocalSpace);
 
-        // Cek lantai datar
+        // Cek kemiringan lantai (harus datar)
         const rot = new THREE.Matrix4().extractRotation(new THREE.Matrix4().fromArray(pose.transform.matrix));
         const normal = new THREE.Vector3(0, 1, 0).applyMatrix4(rot);
         const angle = normal.angleTo(new THREE.Vector3(0, 1, 0)) * (180/Math.PI);
 
-        if (angle < 10) { // Lantai datar valid
-            // Posisikan Reticle
+        if (angle < 10) { 
+            // 1. Tampilkan Reticle
             arReticle.visible = true;
             arReticle.matrix.fromArray(pose.transform.matrix);
 
-            // Posisikan Ground Arrow (Ikuti Reticle)
-            groundArrowObject.visible = true;
-            const newPos = new THREE.Vector3().setFromMatrixPosition(arReticle.matrix);
-            groundArrowObject.position.copy(newPos);
+            // --- REVISI SPAWN JARAK JAUH ---
+            
+            // A. Ambil Posisi & Rotasi Kamera
+            const camPos = new THREE.Vector3();
+            const camQuat = new THREE.Quaternion();
+            arCamera.getWorldPosition(camPos);
+            arCamera.getWorldQuaternion(camQuat);
 
-            // Rotasi Ground Arrow: Menunjuk ke JALAN SETELAH BELOKAN (turnBearing)
+            // B. Hitung Arah Depan (Flat Horizontal)
+            const forwardDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camQuat);
+            forwardDir.y = 0; // Abaikan tinggi, kita hanya butuh arah kompas
+            forwardDir.normalize();
+
+            // C. Tentukan Titik Spawn (Kamera + Jarak ke Depan)
+            // GROUND_ARROW_SPAWN_DIST adalah 4.0 meter (sesuai config di atas)
+            const spawnPos = camPos.clone().add(forwardDir.multiplyScalar(GROUND_ARROW_SPAWN_DIST));
+
+            // D. KUNCI KETINGGIAN KE LANTAI (PENTING!)
+            // Kita ambil tinggi (Y) dari Reticle yang mendeteksi lantai
+            const reticlePos = new THREE.Vector3().setFromMatrixPosition(arReticle.matrix);
+            spawnPos.y = reticlePos.y; 
+
+            // E. Terapkan Posisi ke Panah
+            groundArrowObject.position.copy(spawnPos);
+            groundArrowObject.visible = true;
+
+            // -------------------------------
+
+            // F. Hitung Rotasi (Sama seperti sebelumnya)
             const currentHeading = state.smoothedAlpha || 0;
             let turnDiff = turnBearing - currentHeading;
             if (turnDiff > 180) turnDiff -= 360;
             if (turnDiff < -180) turnDiff += 360;
 
-            const camQuat = new THREE.Quaternion();
-            arCamera.getWorldQuaternion(camQuat);
             const camEuler = new THREE.Euler().setFromQuaternion(camQuat, 'YXZ');
+            groundArrowObject.rotation.set(0, camEuler.y + THREE.MathUtils.degToRad(-turnDiff + ARROW_ROTATION_OFFSET + 30), 0);
 
-            // Putar panah di lantai
-            groundArrowObject.rotation.set(0, camEuler.y + THREE.MathUtils.degToRad(-turnDiff + ARROW_ROTATION_OFFSET), 0);
-
+            // G. Kunci Status
+            isGroundArrowPlaced = true; 
+            
+            arReticle.visible = false; 
             if (arScanningText) arScanningText.style.display = 'none';
+            
+            console.log(`Ground Arrow PLACED at ${GROUND_ARROW_SPAWN_DIST}m ahead.`);
         }
     } else {
-        // Kalau sedang cari belokan tapi lantai belum ketemu
+        // Sedang mencari lantai...
         arReticle.visible = false;
         if (arScanningText) {
             arScanningText.style.display = 'flex';
-            arScanningText.innerText = "⚠️ Belokan Dekat! Arahkan HP ke lantai...";
+            arScanningText.innerText = "⚠️ Belokan! Arahkan ke lantai untuk melihat petunjuk...";
         }
     }
 }

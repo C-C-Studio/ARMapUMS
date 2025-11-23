@@ -4,7 +4,7 @@
 import { initMap } from './features-maplibre/map-init.js';
 import { loadMapData } from './features-maplibre/data-loader.js';
 import { setupGeolocation } from './features-maplibre/geolocation.js';
-import { setupNavigation } from './features-maplibre/navigation.js';
+import { setupNavigation, setupTeleportDebug } from './features-maplibre/navigation.js';
 import { setupUI } from './features-maplibre/ui-controls.js';
 // Import modul AR
 import { startARSession, endARSession } from './features-maplibre/ar-navigation.js';
@@ -29,6 +29,7 @@ map.on('load', () => {
     console.log("Map Loaded. Initializing features...");
 
     loadMapData(map);
+    setupTeleportDebug(map);
     setupUI(map);
     setupGeolocation(map, geolocate);
     setupNavigation(map, geolocate);
