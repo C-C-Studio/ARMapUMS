@@ -77,8 +77,8 @@ function onLocationFound(e) {
             }
         }
 
-        // 4. Cek Sampai Tujuan (< 15 meter)
-        if (distanceMeters < 15) {
+        // 4. Cek Sampai Tujuan (< 5 meter)
+        if (distanceMeters < 5) {
             alert("🎉 Anda telah sampai di tujuan!");
             cancelNavigationMode();
             return; 
