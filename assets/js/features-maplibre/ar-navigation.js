@@ -9,8 +9,10 @@ const AR_TURN_ARROW_URL = 'assets/3DModel/turn-arrow.glb';
 const AR_DEBUG = true;
 
 // Offset Rotasi Model
-const HUD_ARROW_OFFSET = -15; 
+const HUD_ARROW_OFFSET = 0; 
 const TURN_ARROW_OFFSET = 30; // Dari kode baru
+
+const COMPASS_TURN_ANGLE_THRESHOLD = 25;
 
 // Konfigurasi Navigasi
 const TURN_DISTANCE_THRESHOLD = 15; // Meter
@@ -403,13 +405,42 @@ function updateGroundArrow(frame) {
 }
 
 function getGeneralDirection() {
+    // 1. Validasi Data
     if (!state.currentRouteLine || !state.userLocation) return null;
+
     const userPt = turf.point(state.userLocation);
     const line = state.currentRouteLine;
-    const snapped = turf.nearestPointOnLine(line, userPt);
     const coords = line.coordinates;
-    let targetIdx = snapped.properties.index + 3; 
-    if (targetIdx >= coords.length) targetIdx = coords.length - 1;
-    
-    return (turf.bearing(userPt, turf.point(coords[targetIdx])) + 360) % 360;
+
+    // 2. Cari posisi index user saat ini di garis rute
+    const snapped = turf.nearestPointOnLine(line, userPt);
+    const currentIdx = snapped.properties.index;
+
+    // 3. Iterasi ke depan untuk mencari belokan tajam
+    // Kita mulai loop dari posisi user sampai akhir rute
+    for (let i = currentIdx; i < coords.length - 2; i++) {
+        const p1 = coords[i];
+        const p2 = coords[i+1];     // Titik tengah (calon belokan)
+        const p3 = coords[i+2];
+
+        // Hitung bearing (arah) segmen masuk dan segmen keluar
+        const bearing1 = turf.bearing(turf.point(p1), turf.point(p2));
+        const bearing2 = turf.bearing(turf.point(p2), turf.point(p3));
+
+        // Hitung selisih sudut
+        let angleDiff = Math.abs(bearing1 - bearing2);
+        if (angleDiff > 180) angleDiff = 360 - angleDiff;
+
+        // 4. Jika selisih sudut lebih besar dari threshold, INI ADALAH TARGETNYA
+        if (angleDiff > COMPASS_TURN_ANGLE_THRESHOLD) {
+            // Kembalikan bearing dari user LANSUNG ke titik belokan (p2)
+            // (Agar panah menunjuk lurus ke belokan tersebut)
+            return (turf.bearing(userPt, turf.point(p2)) + 360) % 360;
+        }
+    }
+
+    // 5. Fallback: Jika tidak ada belokan lagi (jalan lurus sampai finish)
+    // Arahkan panah ke koordinat paling terakhir (Tujuan Akhir)
+    const lastCoord = coords[coords.length - 1];
+    return (turf.bearing(userPt, turf.point(lastCoord)) + 360) % 360;
 }
