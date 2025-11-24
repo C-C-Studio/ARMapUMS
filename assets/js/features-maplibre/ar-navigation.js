@@ -3,39 +3,39 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { state, elements, config } from './state.js';
 
 // --- KONFIGURASI ---
-// Menggunakan 2 Model berbeda seperti di kode baru
 const AR_HUD_ARROW_URL = 'assets/3DModel/arrow.glb'; 
 const AR_TURN_ARROW_URL = 'assets/3DModel/turn-arrow.glb'; 
 const AR_DEBUG = true;
 
 // Offset Rotasi Model
 const HUD_ARROW_OFFSET = 0; 
-const TURN_ARROW_OFFSET = 30; // Dari kode baru
+const TURN_ARROW_OFFSET = 30; 
 
 const COMPASS_TURN_ANGLE_THRESHOLD = 25;
-
-// Konfigurasi Navigasi
 const TURN_DISTANCE_THRESHOLD = 15; // Meter
 const TURN_ANGLE_THRESHOLD = 30;    // Derajat
-const GROUND_ARROW_SPAWN_DIST = 4.0; // Jarak spawn panah (dari kode baru)
+const GROUND_ARROW_SPAWN_DIST = 4.0; 
 
 // Variabel Global
 let arSession = null;
-let arRenderer, arScene, arCamera, arReticle;
+let arRenderer = null; // Pastikan null di awal
+let arScene = null;
+let arCamera = null;
+let arReticle = null;
 let arHitTestSource = null;
 let arLocalSpace = null;
 let gltfLoader = new GLTFLoader();
 
-// --- OBJEK AR ---
-let hudArrowObject = null;    // Panah Kompas
-let groundArrowObject = null; // Panah Belokan
-let isGroundArrowPlaced = false; // FLAG PENTING DARI KODE BARU (Agar panah stabil)
+// --- OBJEK AR (Disimpan global untuk referensi, tapi dibersihkan tiap sesi) ---
+let hudArrowObject = null;    
+let groundArrowObject = null; 
+let isGroundArrowPlaced = false; 
 
 // State Logic
 let isTurnActive = false;
 let turnBearing = 0;
 
-// UI
+// UI Elements
 const arScanningText = document.getElementById('ar-scanning-text');
 const arWrongWay = document.getElementById('ar-wrong-way');
 const arDangerScreen = document.getElementById('ar-danger-screen'); 
@@ -56,12 +56,9 @@ function initMiniMap() {
     });
 
     state.arMiniMap.on('load', () => {
-        // Resize agar pas di container
         setTimeout(() => { state.arMiniMap.resize(); }, 100);
-
-        if (state.currentRouteLine) {
-            updateMiniMapRoute(state.currentRouteLine);
-        }
+        if (state.currentRouteLine) updateMiniMapRoute(state.currentRouteLine);
+        
         const markerEl = document.createElement('div');
         markerEl.className = 'user-location-marker'; 
         markerEl.innerHTML = `
@@ -76,9 +73,14 @@ function initMiniMap() {
 
 function updateMiniMapRoute(geoJSON) {
     if (!state.arMiniMap || !state.arMiniMap.loaded()) return;
-    if (state.arMiniMap.getSource('ar-route')) {
-        state.arMiniMap.getSource('ar-route').setData(geoJSON);
+    
+    const source = state.arMiniMap.getSource('ar-route');
+    
+    if (source) {
+        // Jika source sudah ada, update datanya
+        source.setData(geoJSON);
     } else {
+        // Jika source belum ada (misal sesi baru tapi map lama), buat baru
         state.arMiniMap.addSource('ar-route', { type: 'geojson', data: geoJSON });
         state.arMiniMap.addLayer({
             id: 'ar-route-line', type: 'line', source: 'ar-route',
@@ -87,21 +89,31 @@ function updateMiniMapRoute(geoJSON) {
     }
 }
 
-// --- THREE.JS SETUP (Menggunakan struktur LAMA yang lebih stabil) ---
+// --- THREE.JS SETUP ---
 function initARRenderer() {
-    if (arRenderer) return;
+    // 1. Safety Check: Jika renderer lama masih nyangkut, matikan dulu
+    if (arRenderer) {
+        console.warn("Renderer lama terdeteksi, membersihkan...");
+        endARSession(); 
+    }
+
     const container = elements.arContainer;
     const rect = container.getBoundingClientRect();
 
+    // 2. Buat Renderer Baru
     arRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     arRenderer.setSize(rect.width, rect.height);
     arRenderer.xr.enabled = true;
     
+    // 3. Masukkan Canvas ke DOM
+    container.appendChild(arRenderer.domElement);
+    
+    // 4. Buat Scene Baru
     arScene = new THREE.Scene();
     arCamera = new THREE.PerspectiveCamera(70, rect.width / rect.height, 0.01, 20);
-    
-    arScene.add(arCamera); // PENTING: Kamera masuk scene
-    
+    arScene.add(arCamera); // Kamera wajib masuk scene
+
+    // Lighting
     arScene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
     const dirLight = new THREE.DirectionalLight(0xffffff, 2);
     dirLight.position.set(0, 10, 5);
@@ -114,17 +126,29 @@ function initARRenderer() {
     arReticle.visible = false;
     arReticle.matrixAutoUpdate = false;
     arScene.add(arReticle);
-    
-    container.appendChild(arRenderer.domElement);
 
+    // 5. Load Model (Dengan Proteksi Duplikasi)
     loadArrows();
 }
 
 function loadArrows() {
-    // 1. Load HUD Arrow (Arrow Biasa)
+    // PROTEKSI: Bersihkan referensi lama jika ada
+    hudArrowObject = null;
+    groundArrowObject = null;
+
+    // 1. Load HUD Arrow
     gltfLoader.load(AR_HUD_ARROW_URL, (gltf) => {
+        // Safety: Jika sesi sudah ditutup saat loading selesai, batalkan.
+        if (!arCamera) return; 
+
+        // Cek Duplikasi: Hapus jika sudah ada objek dengan nama sama di kamera
+        const existingArrow = arCamera.getObjectByName('HUD_ARROW');
+        if (existingArrow) arCamera.remove(existingArrow);
+
         hudArrowObject = gltf.scene.clone();
+        hudArrowObject.name = 'HUD_ARROW'; // Beri nama untuk identifikasi
         
+        // Setup Material
         hudArrowObject.traverse((child) => {
             if (child.isMesh) {
                 child.userData.originalMaterial = child.material;
@@ -138,25 +162,35 @@ function loadArrows() {
         });
 
         hudArrowObject.scale.set(0.08, 0.08, 0.08); 
-        arCamera.add(hudArrowObject); // Tempel ke Kamera
         hudArrowObject.position.set(0, -0.15, -0.8); 
         hudArrowObject.userData.isRed = false;
         hudArrowObject.visible = false; 
+        
+        arCamera.add(hudArrowObject); // Tempel ke Kamera
     });
 
-    // 2. Load Ground Arrow (Arrow Belokan dari kode baru)
+    // 2. Load Ground Arrow
     gltfLoader.load(AR_TURN_ARROW_URL, (gltf) => {
+        if (!arScene) return; // Safety check
+
+        // Cek Duplikasi: Hapus jika sudah ada di scene
+        const existingTurn = arScene.getObjectByName('GROUND_ARROW');
+        if (existingTurn) arScene.remove(existingTurn);
+
         groundArrowObject = gltf.scene.clone();
+        groundArrowObject.name = 'GROUND_ARROW'; // Beri nama
         groundArrowObject.scale.set(0.8, 0.8, 0.8); 
         groundArrowObject.visible = false;
+        
         arScene.add(groundArrowObject);
     });
 }
 
 export async function startARSession() {
-    if (arSession) return;
+    if (arSession) return; 
     if (!navigator.xr) { alert("WebXR tidak didukung."); return; }
 
+    // Tampilkan UI AR
     elements.arContainer.style.display = 'block';
     elements.bottomNavbar.classList.add('translate-y-full'); 
     elements.arButton.style.display = 'none';
@@ -164,7 +198,20 @@ export async function startARSession() {
     document.getElementById('ar-map-overlay').style.display = 'block';
     if (arScanningText) arScanningText.style.display = 'none'; 
 
+    // --- SOLUSI DEFINITIF: HARD RESET MINI MAP ---
+    // Cek jika map sudah ada dari sesi sebelumnya
+    if (state.arMiniMap) {
+        // Hancurkan map lama sepenuhnya!
+        state.arMiniMap.remove(); 
+        state.arMiniMap = null;   
+        arMiniUserMarker = null;  // Reset marker juga
+    }
+
+    // Panggil init lagi. Karena state.arMiniMap sudah null, 
+    // fungsi ini akan membuat map BARU dan memuat rute TERBARU (state.currentRouteLine)
     initMiniMap();
+    // ---------------------------------------------
+
     initARRenderer();
 
     try {
@@ -183,36 +230,72 @@ export async function startARSession() {
         arHitTestSource = await session.requestHitTestSource({ space: viewerSpace });
         
         session.addEventListener("end", endARSession);
+        
         arRenderer.setAnimationLoop(onARFrame);
+
     } catch (e) {
-        console.error(e);
-        endARSession();
+        console.error("Gagal memulai AR Session:", e);
+        endARSession(); 
+        alert("Gagal memulai AR. Pastikan browser mendukung WebXR/Chrome Android.");
     }
 }
 
 export function endARSession() {
-    if (arSession) { arSession.end(); arSession = null; }
+    // 1. Matikan Session WebXR
+    if (arSession) { 
+        arSession.removeEventListener("end", endARSession);
+        arSession.end().catch((e) => console.log("Session end error:", e));
+        arSession = null; 
+    }
     
+    // 2. Matikan Loop & Bersihkan Renderer (SOLUSI MENTAL)
+    if (arRenderer) {
+        arRenderer.setAnimationLoop(null);
+        
+        // PENTING: Hapus elemen Canvas dari HTML secara manual
+        if (arRenderer.domElement && arRenderer.domElement.parentNode) {
+            arRenderer.domElement.parentNode.removeChild(arRenderer.domElement);
+        }
+
+        arRenderer.dispose(); // Hapus konteks WebGL
+        arRenderer = null;    // Reset variabel
+    }
+
+    // 3. Reset Variabel Scene & Objek
+    arScene = null;
+    arCamera = null;
+    arReticle = null;
+    arHitTestSource = null;
+    arLocalSpace = null;
+
+    hudArrowObject = null;
+    groundArrowObject = null;
+
+    // 4. Reset UI
     elements.arContainer.style.display = 'none';
     elements.arButton.style.display = 'flex';
     elements.closeArButton.style.display = 'none';
-    if (!state.isNavigating) elements.bottomNavbar.classList.remove('translate-y-full');
+    
+    if (!state.isNavigating && elements.bottomNavbar) {
+        elements.bottomNavbar.classList.remove('translate-y-full');
+    }
     
     if (arScanningText) arScanningText.style.display = 'none';
     if (arWrongWay) arWrongWay.style.display = 'none';
     if (arDangerScreen) arDangerScreen.style.display = 'none';
     
-    // Reset Logic Flags saat keluar AR
+    // Reset Logic Flags
     isGroundArrowPlaced = false; 
     isTurnActive = false;
     
-    arRenderer.setAnimationLoop(null);
+    console.log("AR Session Cleaned Successfully.");
 }
 
 function onARFrame(time, frame) {
     const session = frame.session;
     if (!session) return;
 
+    // Update Mini Map
     if (state.arMiniMap && state.userLocation) {
         state.arMiniMap.setCenter(state.userLocation);
         state.arMiniMap.setBearing(state.smoothedAlpha || 0);
@@ -221,14 +304,16 @@ function onARFrame(time, frame) {
 
     checkNavigationStatus();
     updateHUDArrow();
-    
-    // Logic Baru: Update Ground Arrow dengan sistem placement
     updateGroundArrow(frame);
 
-    arRenderer.render(arScene, arCamera);
+    // Render Scene
+    if(arRenderer && arScene && arCamera) {
+        arRenderer.render(arScene, arCamera);
+    }
 }
 
-// --- 1. LOGIKA TURF.JS: Deteksi Belokan (Update dari kode baru) ---
+// --- LOGIK NAVIGASI ---
+
 function checkNavigationStatus() {
     if (!state.currentRouteLine || !state.userLocation) return;
 
@@ -240,7 +325,8 @@ function checkNavigationStatus() {
 
     let turnFoundInLoop = false;
 
-    for (let i = currentIdx; i < Math.min(currentIdx + 3, coords.length - 2); i++) {
+    // Loop cari belokan di depan
+    for (let i = currentIdx; i < Math.min(currentIdx + 4, coords.length - 2); i++) {
         const p1 = coords[i];
         const p2 = coords[i+1];
         const p3 = coords[i+2];
@@ -256,17 +342,15 @@ function checkNavigationStatus() {
             if (distToTurn < TURN_DISTANCE_THRESHOLD) {
                 if (!isTurnActive) {
                     isTurnActive = true;
-                    isGroundArrowPlaced = false; // Reset panah agar dipasang ulang untuk belokan ini
+                    isGroundArrowPlaced = false; 
                     turnBearing = (bearing2 + 360) % 360; 
-                    if (AR_DEBUG) console.log(`ZONE BELOKAN: ${distToTurn.toFixed(1)}m`);
                 }
                 turnFoundInLoop = true;
-                return; 
+                return; // Stop mencari jika sudah ketemu yang terdekat
             }
         }
     }
 
-    // Jika sudah tidak di zona belokan, reset semua
     if (!turnFoundInLoop && isTurnActive) {
         isTurnActive = false;
         isGroundArrowPlaced = false; 
@@ -275,7 +359,6 @@ function checkNavigationStatus() {
     }
 }
 
-// --- 2. HUD ARROW ---
 function updateHUDArrow() {
     if (!hudArrowObject) return;
     hudArrowObject.visible = true;
@@ -288,31 +371,27 @@ function updateHUDArrow() {
         if (angleDiff > 180) angleDiff -= 360;
         if (angleDiff < -180) angleDiff += 360;
 
-        // Logika Salah Arah (UI + Warna Merah)
+        // UI Salah Arah
         const WRONG_WAY_THRESHOLD = 100;
-
         if (Math.abs(angleDiff) > WRONG_WAY_THRESHOLD) {
-            if (arWrongWay && arWrongWay.style.display !== 'flex') arWrongWay.style.display = 'flex';
-            if (arDangerScreen && arDangerScreen.style.display !== 'block') arDangerScreen.style.display = 'block';
+            if (arWrongWay) arWrongWay.style.display = 'flex';
+            if (arDangerScreen) arDangerScreen.style.display = 'block';
 
             if (!hudArrowObject.userData.isRed) {
-                hudArrowObject.traverse((child) => {
-                    if (child.isMesh && child.userData.redMaterial) child.material = child.userData.redMaterial;
-                });
+                hudArrowObject.traverse((c) => { if (c.isMesh && c.userData.redMaterial) c.material = c.userData.redMaterial; });
                 hudArrowObject.userData.isRed = true;
             }
         } else {
-            if (arWrongWay && arWrongWay.style.display !== 'none') arWrongWay.style.display = 'none';
-            if (arDangerScreen && arDangerScreen.style.display !== 'none') arDangerScreen.style.display = 'none';
+            if (arWrongWay) arWrongWay.style.display = 'none';
+            if (arDangerScreen) arDangerScreen.style.display = 'none';
 
             if (hudArrowObject.userData.isRed) {
-                hudArrowObject.traverse((child) => {
-                    if (child.isMesh && child.userData.originalMaterial) child.material = child.userData.originalMaterial;
-                });
+                hudArrowObject.traverse((c) => { if (c.isMesh && c.userData.originalMaterial) c.material = c.userData.originalMaterial; });
                 hudArrowObject.userData.isRed = false;
             }
         }
 
+        // Animasi Rotasi
         const targetQuaternion = new THREE.Quaternion();
         const baseRotation = new THREE.Euler(0, 0, 0, 'YXZ');
         
@@ -329,7 +408,6 @@ function updateHUDArrow() {
     }
 }
 
-// --- 3. GROUND ARROW (Logika STABIL dari kode Baru) ---
 function updateGroundArrow(frame) {
     if (!groundArrowObject || !arHitTestSource) return;
 
@@ -340,7 +418,6 @@ function updateGroundArrow(frame) {
         return;
     }
 
-    // JIKA PANAH SUDAH TERPASANG, JANGAN HIT TEST LAGI (Agar stabil/tidak goyang)
     if (isGroundArrowPlaced) {
         groundArrowObject.visible = true; 
         arReticle.visible = false; 
@@ -348,7 +425,6 @@ function updateGroundArrow(frame) {
         return; 
     }
 
-    // Jika belum terpasang, cari lantai
     const hitTestResults = frame.getHitTestResults(arHitTestSource);
     if (hitTestResults.length > 0) {
         const hit = hitTestResults[0];
@@ -362,7 +438,6 @@ function updateGroundArrow(frame) {
             arReticle.visible = true;
             arReticle.matrix.fromArray(pose.transform.matrix);
 
-            // LOGIKA BARU: Spawn panah di DEPAN kamera, bukan tepat di reticle hit
             const camPos = new THREE.Vector3();
             const camQuat = new THREE.Quaternion();
             arCamera.getWorldPosition(camPos);
@@ -372,10 +447,9 @@ function updateGroundArrow(frame) {
             forwardDir.y = 0; 
             forwardDir.normalize();
 
-            // Posisikan panah 4 meter di depan kamera
             const spawnPos = camPos.clone().add(forwardDir.multiplyScalar(GROUND_ARROW_SPAWN_DIST));
             const reticlePos = new THREE.Vector3().setFromMatrixPosition(arReticle.matrix);
-            spawnPos.y = reticlePos.y; // Samakan tinggi dengan lantai (reticle)
+            spawnPos.y = reticlePos.y; 
 
             groundArrowObject.position.copy(spawnPos);
             groundArrowObject.visible = true;
@@ -386,61 +460,47 @@ function updateGroundArrow(frame) {
             if (turnDiff < -180) turnDiff += 360;
 
             const camEuler = new THREE.Euler().setFromQuaternion(camQuat, 'YXZ');
-            // Rotasi mengikuti arah belokan jalan (bukan kamera user)
             groundArrowObject.rotation.set(0, camEuler.y + THREE.MathUtils.degToRad(-turnDiff + TURN_ARROW_OFFSET), 0);
 
-            // KUNCI POSISI (Jangan pindah lagi)
             isGroundArrowPlaced = true; 
             arReticle.visible = false; 
             if (arScanningText) arScanningText.style.display = 'none';
-            console.log(`Ground Arrow PLACED at ${GROUND_ARROW_SPAWN_DIST}m ahead.`);
         }
     } else {
         arReticle.visible = false;
         if (arScanningText) {
             arScanningText.style.display = 'flex';
-            arScanningText.innerText = "⚠️ Belokan! Arahkan ke lantai untuk melihat petunjuk...";
+            arScanningText.innerText = "⚠️ Belokan! Arahkan ke lantai...";
         }
     }
 }
 
 function getGeneralDirection() {
-    // 1. Validasi Data
     if (!state.currentRouteLine || !state.userLocation) return null;
 
     const userPt = turf.point(state.userLocation);
     const line = state.currentRouteLine;
     const coords = line.coordinates;
 
-    // 2. Cari posisi index user saat ini di garis rute
     const snapped = turf.nearestPointOnLine(line, userPt);
     const currentIdx = snapped.properties.index;
 
-    // 3. Iterasi ke depan untuk mencari belokan tajam
-    // Kita mulai loop dari posisi user sampai akhir rute
     for (let i = currentIdx; i < coords.length - 2; i++) {
         const p1 = coords[i];
-        const p2 = coords[i+1];     // Titik tengah (calon belokan)
+        const p2 = coords[i+1];
         const p3 = coords[i+2];
 
-        // Hitung bearing (arah) segmen masuk dan segmen keluar
         const bearing1 = turf.bearing(turf.point(p1), turf.point(p2));
         const bearing2 = turf.bearing(turf.point(p2), turf.point(p3));
 
-        // Hitung selisih sudut
         let angleDiff = Math.abs(bearing1 - bearing2);
         if (angleDiff > 180) angleDiff = 360 - angleDiff;
 
-        // 4. Jika selisih sudut lebih besar dari threshold, INI ADALAH TARGETNYA
         if (angleDiff > COMPASS_TURN_ANGLE_THRESHOLD) {
-            // Kembalikan bearing dari user LANSUNG ke titik belokan (p2)
-            // (Agar panah menunjuk lurus ke belokan tersebut)
             return (turf.bearing(userPt, turf.point(p2)) + 360) % 360;
         }
     }
 
-    // 5. Fallback: Jika tidak ada belokan lagi (jalan lurus sampai finish)
-    // Arahkan panah ke koordinat paling terakhir (Tujuan Akhir)
     const lastCoord = coords[coords.length - 1];
     return (turf.bearing(userPt, turf.point(lastCoord)) + 360) % 360;
 }
