@@ -140,7 +140,7 @@ function startNavigationMode() {
     elements.snapToRoadBtn.classList.remove('bg-gray-500');
     elements.snapToRoadBtn.classList.add('bg-blue-500');
     elements.snapToRoadBtn.setAttribute('title', 'Snap to Road (Aktif)');
-    
+
     if (elements.locateButton) elements.locateButton.style.display = 'flex';
     if (elements.arButton) elements.arButton.style.display = 'flex';
 
@@ -198,9 +198,15 @@ function toggleSnapToRoad() {
     }
 }
 
-function interruptNavigation() {
+function interruptNavigation(e) {
+    if (e && e.type === 'zoomstart' && !e.originalEvent) {
+        return;
+    }
+
     clearTimeout(state.snapBackTimer);
+    
     if (state.isNavigating) {
+        console.log("Navigation: User interrupted navigation. Pausing auto-follow...");
         state.isNavigating = false;
         state.wasNavigating = true; 
         elements.startNavBtn.style.display = 'none';
@@ -210,9 +216,11 @@ function interruptNavigation() {
 function startSnapBackTimer() {
     clearTimeout(state.snapBackTimer);
     if (state.wasNavigating && mapInstance.getSource('route')) {
+        console.log("Navigation: User interaction stopped. Starting snap-back timer (4s)...");
         elements.cancelNavBtn.style.display = 'flex';
         elements.snapToRoadBtn.style.display = 'flex';
         state.snapBackTimer = setTimeout(() => {
+            console.log("Navigation: Timer finished. Snapping back to navigation mode.");
             startNavigationMode();
         }, 4000); 
     }
