@@ -9,12 +9,12 @@ const AR_DEBUG = true;
 
 // Offset Rotasi Model
 const HUD_ARROW_OFFSET = 0; 
-const TURN_ARROW_OFFSET = 30; 
+const TURN_ARROW_OFFSET = 40; 
 
 const COMPASS_TURN_ANGLE_THRESHOLD = 25;
 const TURN_DISTANCE_THRESHOLD = 15; // Meter
 const TURN_ANGLE_THRESHOLD = 30;    // Derajat
-const GROUND_ARROW_SPAWN_DIST = 4.0; 
+const GROUND_ARROW_SPAWN_DIST = 10.0; 
 
 // Variabel Global
 let arSession = null;
