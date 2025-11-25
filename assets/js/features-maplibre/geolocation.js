@@ -103,6 +103,7 @@ function onLocationFound(e) {
             duration: 1000,
             easing: n => n,
             pitch: 60,
+            zoom: 19,
             padding: { top: 300 }
         });
     }

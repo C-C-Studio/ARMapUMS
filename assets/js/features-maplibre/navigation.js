@@ -119,7 +119,6 @@ export async function createRoute(map, destLat, destLon, destName) {
             const durationMin = Math.round(route.duration / 60);
             if (elements.routeDestTime) elements.routeDestTime.textContent = `${durationMin} min`;
             if (elements.routeInfoPanel) elements.routeInfoPanel.classList.remove('translate-y-full');
-            if (elements.bottomNavbar) elements.bottomNavbar.classList.add('translate-y-full');
 
         } else {
             alert("Tidak dapat menemukan rute.");
@@ -162,8 +161,14 @@ function startNavigationMode() {
     if (elements.bottomNavbar) elements.bottomNavbar.classList.add('translate-y-full');
     
     if (state.userLocation) {
-        mapInstance.easeTo({
-            center: state.userLocation, pitch: 60, zoom: 19, duration: 1000, padding: { top: 300 }
+        mapInstance.flyTo({
+            center: state.userLocation,
+            pitch: 60,
+            zoom: 19,
+            padding: { top: 300 },
+            speed: 1.5,       // Kecepatan terbang
+            curve: 1,         // Kurva animasi
+            essential: true   // Mencegah animasi dibatalkan oleh interaksi kecil
         });
     } else {
         geolocateControl.trigger();
