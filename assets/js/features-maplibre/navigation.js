@@ -101,8 +101,21 @@ export async function createRoute(map, destLat, destLon, destName) {
             }, 10);
 
             if (elements.routeDestName) elements.routeDestName.textContent = destName;
-            const distanceKm = (route.distance / 1000).toFixed(1);
-            if (elements.routeDestDistance) elements.routeDestDistance.textContent = `${distanceKm} km`;
+
+            // Mapbox memberikan output route.distance dalam satuan meter
+            const distMeters = route.distance;
+            let distDisplayText;
+
+            if (distMeters < 1000) {
+                // Jika di bawah 1km, gunakan meter (bulatkan)
+                distDisplayText = `${Math.round(distMeters)} m`;
+            } else {
+                // Jika 1km atau lebih, gunakan km (1 desimal)
+                distDisplayText = `${(distMeters / 1000).toFixed(1)} km`;
+            }
+
+            if (elements.routeDestDistance) elements.routeDestDistance.textContent = distDisplayText;
+
             const durationMin = Math.round(route.duration / 60);
             if (elements.routeDestTime) elements.routeDestTime.textContent = `${durationMin} min`;
             if (elements.routeInfoPanel) elements.routeInfoPanel.classList.remove('translate-y-full');
