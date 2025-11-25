@@ -186,6 +186,7 @@ export function cancelNavigationMode() {
     if (elements.routeInfoPanel) elements.routeInfoPanel.classList.add('translate-y-full');
     elements.cancelNavBtn.style.display = 'none';
     elements.snapToRoadBtn.style.display = 'none';
+    if (elements.arButton) elements.arButton.style.display = 'none';
     if (elements.distanceIndicator) {
         elements.distanceIndicator.style.display = 'none';
         if (elements.distanceText) elements.distanceText.innerText = "0 m";
