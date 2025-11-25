@@ -108,7 +108,7 @@
             </main>
         </div>
 
-        <div id="route-info-panel" class="absolute bottom-0 left-0 right-0 z-20 bg-white rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.1)] p-6 transform transition-transform duration-300 translate-y-full">
+        <div id="route-info-panel" class="absolute bottom-0 left-0 right-0 z-20 bg-white/50 backdrop-blur-md rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.1)] p-6 transform transition-transform duration-300 translate-y-full">
             <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-4"></div>
             
             <div class="mb-4">
@@ -153,26 +153,14 @@
             <i class="fas fa-location-crosshairs"></i>
         </button>
 
-        <nav id="bottom-navbar" class="absolute bottom-0 left-0 right-0 z-10 bg-[#0c2340] text-white flex justify-around py-3 h-16 transition-transform duration-300 ease-in-out">
-            <a href="index.html" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
+        <nav id="bottom-navbar" class="absolute bottom-0 left-0 right-0 z-10 bg-[#0c2340]/50 backdrop-blur-md text-white flex justify-around py-3 h-16 transition-transform duration-300 ease-in-out">
+            <a href="index.html" class="flex flex-col items-center justify-center text-gray-600 hover:text-white w-1/4">
                 <i class="fas fa-home text-xl mb-1"></i>
-                <span class="text-xs">Beranda</span>
-            </a>
-            <a href="maps.html" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
-                <i class="fas fa-map-location-dot text-xl mb-1"></i>
-                <span class="text-xs font-bold">Leaflet</span>
+                <span class="text-xs">Home</span>
             </a>
             <a href="maplibre.html" class="flex flex-col items-center justify-center text-white w-1/4">
                 <i class="fas fa-map-location-dot text-xl mb-1"></i>
-                <span class="text-xs">Maplibre</span>
-            </a>
-            <a href="google-maps.html" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
-                <i class="fas fa-map-location-dot text-xl mb-1"></i>
-                <span class="text-xs">Google</span>
-            </a>
-            <a href="#" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
-                <i class="fas fa-cog text-xl mb-1"></i>
-                <span class="text-xs">Pengaturan</span>
+                <span class="text-xs">Maps</span>
             </a>
         </nav>
     </div>
@@ -181,6 +169,6 @@
     <script src="assets/js/geofence-maplibre.js"></script>
     <script src="assets/js/config.js"></script>
     <script type="module" src="assets/js/main-maplibre.js"></script>
-        
+
 </body>
 </html>

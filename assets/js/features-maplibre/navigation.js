@@ -119,6 +119,7 @@ export async function createRoute(map, destLat, destLon, destName) {
             const durationMin = Math.round(route.duration / 60);
             if (elements.routeDestTime) elements.routeDestTime.textContent = `${durationMin} min`;
             if (elements.routeInfoPanel) elements.routeInfoPanel.classList.remove('translate-y-full');
+            if (elements.bottomNavbar) elements.bottomNavbar.classList.add('translate-y-full');
 
         } else {
             alert("Tidak dapat menemukan rute.");

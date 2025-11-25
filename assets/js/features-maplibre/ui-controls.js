@@ -74,7 +74,7 @@ function hideMapControls() {
 }
 
 function showMapControls() {
-    if (state.isNavigating || state.wasNavigating) return;
+    if (state.isNavigating || state.wasNavigating || state.isPreviewingRoute) return;
 
     if (bottomNavbar) {
         bottomNavbar.classList.remove('translate-y-full');
