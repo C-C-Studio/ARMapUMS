@@ -30,7 +30,7 @@ map.on('load', () => {
     setupNavigation(map, geolocate);
     
     // --- FITUR BARU: Teleport Debug ---
-    setupTeleportDebug(map);
+    //setupTeleportDebug(map);
 
     // Listener Tombol AR (Hanya satu listener agar tidak dobel)
     elements.arButton.addEventListener('click', (e) => {
