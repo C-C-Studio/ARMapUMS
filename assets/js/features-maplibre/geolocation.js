@@ -82,6 +82,11 @@ function onLocationFound(e) {
 
             // CEK: Agar popup tidak muncul berulang-ulang
             if (!state.hasArrivedFlag) { 
+                if (state.isArActive) {
+                    // Kita simulasikan klik tombol tutup AR
+                    // Ini akan memicu endARSession() secara bersih
+                    if (elements.closeArButton) elements.closeArButton.click();
+                }
                 state.hasArrivedFlag = true; 
                 
                 // Isi Konten Modal
@@ -96,9 +101,13 @@ function onLocationFound(e) {
             }
             return;
         } else {
-            // Reset flag jika pengguna menjauh lagi (misal > 20m) agar tidak spamming
+            // Reset flag jika pengguna menjauh lagi (misal > 10m) agar tidak spamming
             if (distanceMeters > 10) {
-                 state.hasArrivedFlag = false; 
+                state.hasArrivedFlag = false; 
+                if (elements.arrivalModal && !elements.arrivalModal.classList.contains('hidden')) {
+                    elements.arrivalModal.classList.add('hidden');
+                    console.log("User menjauh dari tujuan, menyembunyikan popup arrival otomatis.");
+                }
             }
         }
     }

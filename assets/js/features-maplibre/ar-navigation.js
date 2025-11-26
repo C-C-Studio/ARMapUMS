@@ -190,6 +190,8 @@ export async function startARSession() {
     if (arSession) return; 
     if (!navigator.xr) { alert("WebXR tidak didukung."); return; }
 
+    state.isArActive = true; // popup arrival helper
+
     // Tampilkan UI AR
     elements.arContainer.style.display = 'block';
     elements.bottomNavbar.classList.add('translate-y-full'); 
@@ -270,6 +272,8 @@ export function endARSession() {
 
     hudArrowObject = null;
     groundArrowObject = null;
+
+    state.isArActive = false; // popup arrival helper
 
     // 4. Reset UI
     elements.arContainer.style.display = 'none';
