@@ -165,6 +165,27 @@
         </nav>
     </div>
 
+    <div id="arrival-modal" class="fixed inset-0 z-[70] hidden flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 transition-opacity duration-300">
+        <div class="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl transform scale-100 transition-all animate-bounce-in">
+            
+            <div class="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-5 text-4xl shadow-inner">
+                <i class="fas fa-check-circle"></i>
+            </div>
+
+            <h2 class="text-gray-400 font-semibold text-xs uppercase tracking-widest mb-1">You are at your destination</h2>
+            <h1 class="text-2xl font-bold text-gray-800 mb-1">Welcome to,</h1>
+            
+            <div class="bg-blue-50 rounded-xl p-4 my-4 border border-blue-100">
+                <h3 id="arrival-dest-name" class="text-blue-700 text-xl font-extrabold leading-tight mb-1">Nama Lokasi</h3>
+                <p id="arrival-dest-desc" class="text-gray-600 text-sm font-medium">Deskripsi lokasi akan muncul di sini.</p>
+            </div>
+
+            <button id="arrival-done-btn" class="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-500/30">
+                Selesai
+            </button>
+        </div>
+    </div>
+
     <script src='https://unpkg.com/maplibre-gl@4.1.3/dist/maplibre-gl.js'></script>
     <script src="assets/js/geofence-maplibre.js"></script>
     <script src="assets/js/config.js"></script>

@@ -11,6 +11,16 @@ export function setupNavigation(map, geolocateCtrl) {
     elements.cancelNavBtn.addEventListener('click', cancelNavigationMode);
     elements.snapToRoadBtn.addEventListener('click', toggleSnapToRoad);
 
+    // Listener untuk tombol Selesai di Popup
+    if (elements.arrivalDoneBtn) {
+        elements.arrivalDoneBtn.addEventListener('click', () => {
+            // Sembunyikan modal
+            elements.arrivalModal.classList.add('hidden');
+            // Panggil fungsi pembatalan navigasi (reset kamera dll)
+            cancelNavigationMode();
+        });
+    }
+
     // Listener Interupsi (Snap Back)
     map.on('dragstart', interruptNavigation);
     map.on('zoomstart', interruptNavigation);
@@ -18,7 +28,7 @@ export function setupNavigation(map, geolocateCtrl) {
     map.on('zoomend', startSnapBackTimer);
 }
 
-export async function createRoute(map, destLat, destLon, destName) {
+export async function createRoute(map, destLat, destLon, destName, destDesc = "") {
     mapInstance = map; 
     
     clearTimeout(state.snapBackTimer); 
@@ -26,6 +36,11 @@ export async function createRoute(map, destLat, destLon, destName) {
     state.isNavigating = false;     
     state.wasNavigating = false;  
     state.isPreviewingRoute = true;
+    state.hasArrivedFlag = false;
+    state.activeDestination = {
+        name: destName,
+        desc: destDesc || "Lokasi Kampus UMS" // Fallback jika deskripsi kosong
+    };
 
     if (!state.isUserOnCampusFlag) {
         alert("Fitur rute hanya dapat digunakan saat Anda berada di area kampus UMS.");
@@ -130,10 +145,10 @@ export async function createRoute(map, destLat, destLon, destName) {
     }
 }
 
-export function handleRouteRequest(lat, lon, nama) {
-    state.pendingRouteDestination = { lat: lat, lon: lon, nama: nama };
+export function handleRouteRequest(lat, lon, nama, deskripsi = "") {
+    state.pendingRouteDestination = { lat: lat, lon: lon, nama: nama, deskripsi: deskripsi };
     if (state.userLocation) {
-        createRoute(mapInstance, lat, lon, nama);
+        createRoute(mapInstance, lat, lon, nama, deskripsi);
         state.pendingRouteDestination = null; 
     } else {
         state.isProgrammaticTrigger = true;

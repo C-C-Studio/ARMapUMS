@@ -28,12 +28,16 @@ export const state = {
     arMiniMap: null,
     arRouteLine: null, // Menyimpan rute yang diproses untuk AR
     arHeading: 0,      // Heading khusus AR
+
+    // Lokasi Tujuan
+    activeDestination: null,
+    hasArrivedFlag: false,
 };
 
 // Konstanta konfigurasi
 export const config = {
-    latmap: -7.5567,
-    lonmap: 110.7711,
+    latmap: -7.55710,
+    lonmap: 110.77125,
     smoothingFactor: 0.1
 };
 
@@ -59,5 +63,10 @@ export const elements = {
     arContainer: document.getElementById('ar-container'),
     arButton: document.getElementById('ar-btn'),
     closeArButton: document.getElementById('close-ar-btn'),
-    locateButton: document.getElementById('locate-btn')
+    locateButton: document.getElementById('locate-btn'),
+
+    arrivalModal: document.getElementById('arrival-modal'),
+    arrivalDestName: document.getElementById('arrival-dest-name'),
+    arrivalDestDesc: document.getElementById('arrival-dest-desc'),
+    arrivalDoneBtn: document.getElementById('arrival-done-btn')
 };

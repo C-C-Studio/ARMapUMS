@@ -34,10 +34,12 @@ export function setupUI(map) {
                 zoom: 18
             });
         } else {
-            // Tombol Route atau klik body item
-            // Nama diambil dari textContent h3 karena dataset nama di lowercase
+            // AMBIL NAMA & DESKRIPSI dari elemen HTML
             const namaAsli = item.querySelector('h3').textContent; 
-            handleRouteRequest(item.dataset.lat, item.dataset.lon, namaAsli);
+            const deskripsiAsli = item.querySelector('p').textContent; // Ambil teks dari tag <p>
+
+            // PANGGIL handleRouteRequest dengan parameter lengkap
+            handleRouteRequest(item.dataset.lat, item.dataset.lon, namaAsli, deskripsiAsli);
         }
         searchPanel.classList.add('-translate-y-full');
     });

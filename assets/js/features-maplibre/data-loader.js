@@ -18,7 +18,10 @@ export function loadMapData(map) {
                         <h3 class="font-bold text-gray-900">${lokasi.nama}</h3>
                         <p class="text-sm text-gray-600">${lokasi.deskripsi}</p>
                         <button class="route-btn-popup w-full mt-2 bg-blue-500 text-white text-sm font-semibold py-1 px-3 rounded" 
-                                data-lat="${lokasi.lat}" data-lon="${lokasi.lon}" data-nama="${lokasi.nama}">
+                                data-lat="${lokasi.lat}" 
+                                data-lon="${lokasi.lon}" 
+                                data-nama="${lokasi.nama}"
+                                data-desc="${lokasi.deskripsi}">
                             <i class="fas fa-route mr-1"></i> Rute ke sini
                         </button>
                     </div>`;
@@ -104,7 +107,7 @@ function createLocationListItem(lokasi) {
 document.getElementById('map').addEventListener('click', function(e) {
     if (e.target.matches('.route-btn-popup, .route-btn-popup *')) {
         const button = e.target.closest('.route-btn-popup');
-        handleRouteRequest(button.dataset.lat, button.dataset.lon, button.dataset.nama); 
+        handleRouteRequest(button.dataset.lat, button.dataset.lon, button.dataset.nama, button.dataset.desc); 
         if (state.activePopup) {
             state.activePopup.remove();
             state.activePopup = null;

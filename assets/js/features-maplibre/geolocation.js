@@ -78,10 +78,28 @@ function onLocationFound(e) {
         }
 
         // 4. Cek Sampai Tujuan (< 5 meter)
-        if (distanceMeters < 5) {
-            alert("🎉 Anda telah sampai di tujuan!");
-            cancelNavigationMode();
-            return; 
+        if (distanceMeters < 5) { 
+
+            // CEK: Agar popup tidak muncul berulang-ulang
+            if (!state.hasArrivedFlag) { 
+                state.hasArrivedFlag = true; 
+                
+                // Isi Konten Modal
+                if (state.activeDestination) {
+                    // Pastikan elemen ada sebelum akses textContent untuk mencegah error
+                    if(elements.arrivalDestName) elements.arrivalDestName.textContent = state.activeDestination.name;
+                    if(elements.arrivalDestDesc) elements.arrivalDestDesc.textContent = state.activeDestination.desc;
+                }
+
+                // Tampilkan Modal
+                if(elements.arrivalModal) elements.arrivalModal.classList.remove('hidden');
+            }
+            return;
+        } else {
+            // Reset flag jika pengguna menjauh lagi (misal > 20m) agar tidak spamming
+            if (distanceMeters > 10) {
+                 state.hasArrivedFlag = false; 
+            }
         }
     }
 
