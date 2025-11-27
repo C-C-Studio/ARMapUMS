@@ -80,10 +80,36 @@ export function loadMapData(map) {
 }
 
 // Helper
+// function createLocationListItem(lokasi) {
+//     const itemDiv = document.createElement('div');
+//     itemDiv.className = 'location-item bg-[#1f3a5f] rounded-xl p-4 flex items-center gap-4 cursor-pointer';
+//     itemDiv.dataset.nama = lokasi.nama.toLowerCase(); 
+//     itemDiv.dataset.lat = lokasi.lat;
+//     itemDiv.dataset.lon = lokasi.lon;
+//     itemDiv.dataset.desc = lokasi.deskripsi;
+
+//     const initial = lokasi.nama.charAt(0).toUpperCase() || 'L';
+    
+//     itemDiv.innerHTML = `
+//         <div class="flex-shrink-0 w-10 h-10 rounded-full bg-purple-200 text-purple-700 flex items-center justify-center font-bold">${initial}</div>
+//         <div class="flex-grow min-w-0">
+//             <h3 class="text-white font-semibold truncate">${lokasi.nama}</h3>
+//             <p class="text-gray-300 text-sm truncate">${lokasi.deskripsi}</p>
+//         </div>
+//         <div class="flex-shrink-0 flex gap-2">
+//             <button class="location-btn w-9 h-9 bg-gray-600/50 text-white rounded-lg flex items-center justify-center"><i class="fas fa-location-dot"></i></button>
+//             <button class="route-btn w-9 h-9 bg-gray-600/50 text-white rounded-lg flex items-center justify-center"><i class="fas fa-route"></i></button>
+//         </div>
+//     `;
+//     return itemDiv;
+// }
+
+// Versi dengan marquee effect
 function createLocationListItem(lokasi) {
     const itemDiv = document.createElement('div');
-    itemDiv.className = 'location-item bg-[#1f3a5f] rounded-xl p-4 flex items-center gap-4 cursor-pointer';
-    itemDiv.dataset.nama = lokasi.nama.toLowerCase(); 
+    itemDiv.className = 'location-item bg-[#1f3a5f] rounded-xl p-4 flex items-center gap-4 cursor-pointer relative overflow-hidden';
+    
+    itemDiv.dataset.nama = lokasi.nama; 
     itemDiv.dataset.lat = lokasi.lat;
     itemDiv.dataset.lon = lokasi.lon;
     itemDiv.dataset.desc = lokasi.deskripsi;
@@ -91,12 +117,24 @@ function createLocationListItem(lokasi) {
     const initial = lokasi.nama.charAt(0).toUpperCase() || 'L';
     
     itemDiv.innerHTML = `
-        <div class="flex-shrink-0 w-10 h-10 rounded-full bg-purple-200 text-purple-700 flex items-center justify-center font-bold">${initial}</div>
-        <div class="flex-grow min-w-0">
-            <h3 class="text-white font-semibold truncate">${lokasi.nama}</h3>
-            <p class="text-gray-300 text-sm truncate">${lokasi.deskripsi}</p>
+        <div class="flex-shrink-0 w-10 h-10 rounded-full bg-purple-200 text-purple-700 flex items-center justify-center font-bold">
+            ${initial}
         </div>
-        <div class="flex-shrink-0 flex gap-2">
+        
+        <div class="flex-grow min-w-0 flex flex-col gap-0.5 w-[60%]"> <div class="marquee-container">
+                <h3 class="marquee-content text-white font-semibold text-base">
+                    ${lokasi.nama}
+                </h3>
+            </div>
+            
+            <div class="marquee-container">
+                <p class="marquee-content text-gray-300 text-sm">
+                    ${lokasi.deskripsi}
+                </p>
+            </div>
+        </div>
+
+        <div class="flex-shrink-0 flex gap-2 z-10 bg-[#1f3a5f] pl-2 shadow-[-10px_0_10px_#1f3a5f]">
             <button class="location-btn w-9 h-9 bg-gray-600/50 text-white rounded-lg flex items-center justify-center"><i class="fas fa-location-dot"></i></button>
             <button class="route-btn w-9 h-9 bg-gray-600/50 text-white rounded-lg flex items-center justify-center"><i class="fas fa-route"></i></button>
         </div>

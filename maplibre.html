@@ -38,6 +38,30 @@
             background: conic-gradient( from 300deg at 50% 50%, #1a73e84D 0deg, #1a73e84D 120deg, transparent 120.1deg, transparent 360deg ); 
             border-radius: 50%; z-index: 1; transition: transform 0.2s ease-out; 
         }
+        /* Container teks agar terpotong rapi */
+        .marquee-container {
+            overflow: hidden;
+            white-space: nowrap;
+            position: relative;
+            /* Masking agar teks terlihat memudar di ujung kanan */
+            mask-image: linear-gradient(to right, black 90%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%);
+        }
+        .marquee-content {
+            display: inline-block;
+            /* Default: diam */
+            transform: translateX(0);
+        }
+        /* Kelas ini akan ditambahkan via JS jika teks kepanjangan */
+        .auto-scroll-active {
+            /* Durasi disesuaikan dengan panjang teks nanti, tapi kita set default 4s */
+            animation: scroll-pingpong 4s linear infinite alternate;
+            animation-delay: 1s; /* Jeda 1 detik sebelum mulai gerak */
+        }
+        @keyframes scroll-pingpong {
+            0%, 20% { transform: translateX(0); } /* Diam sebentar di awal */
+            80%, 100% { transform: translateX(var(--scroll-dist)); } /* Scroll ke ujung */
+        }
     </style>
 </head>
 <body class="bg-gray-400">
