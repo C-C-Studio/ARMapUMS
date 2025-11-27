@@ -38,7 +38,7 @@
             background: conic-gradient( from 300deg at 50% 50%, #1a73e84D 0deg, #1a73e84D 120deg, transparent 120.1deg, transparent 360deg ); 
             border-radius: 50%; z-index: 1; transition: transform 0.2s ease-out; 
         }
-        /* Container teks agar terpotong rapi */
+        /* Running text search panel */
         .marquee-container {
             overflow: hidden;
             white-space: nowrap;
@@ -52,9 +52,7 @@
             /* Default: diam */
             transform: translateX(0);
         }
-        /* Kelas ini akan ditambahkan via JS jika teks kepanjangan */
         .auto-scroll-active {
-            /* Durasi disesuaikan dengan panjang teks nanti, tapi kita set default 4s */
             animation: scroll-pingpong 4s linear infinite alternate;
             animation-delay: 1s; /* Jeda 1 detik sebelum mulai gerak */
         }
@@ -196,7 +194,7 @@
                 <i class="fas fa-check-circle"></i>
             </div>
 
-            <h2 class="text-gray-400 font-semibold text-xs uppercase tracking-widest mb-1">You are at your destination</h2>
+            <h2 class="text-gray-400 font-semibold text-xs uppercase tracking-widest mb-1">You have arrived</h2>
             <h1 class="text-2xl font-bold text-gray-800 mb-1">Welcome to,</h1>
             
             <div class="bg-blue-50 rounded-xl p-4 my-4 border border-blue-100">

@@ -70,7 +70,6 @@ export function setupUI(map) {
                 zoom: 18
             });
         } else {
-            // AMBIL NAMA & DESKRIPSI dari elemen HTML
             const namaAsli = item.querySelector('h3').textContent; 
             // const deskripsiAsli = item.querySelector('p').textContent; // Ambil teks dari tag <p>
             const deskripsiAsli = item.dataset.desc;
