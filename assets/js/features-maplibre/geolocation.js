@@ -155,7 +155,8 @@ function onLocationFound(e) {
             mapInstance,
             state.pendingRouteDestination.lat,
             state.pendingRouteDestination.lon,
-            state.pendingRouteDestination.nama
+            state.pendingRouteDestination.nama,
+            state.pendingRouteDestination.deskripsi
         );
         state.pendingRouteDestination = null;
     }

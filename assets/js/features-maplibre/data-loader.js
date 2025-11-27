@@ -86,6 +86,7 @@ function createLocationListItem(lokasi) {
     itemDiv.dataset.nama = lokasi.nama.toLowerCase(); 
     itemDiv.dataset.lat = lokasi.lat;
     itemDiv.dataset.lon = lokasi.lon;
+    itemDiv.dataset.desc = lokasi.deskripsi;
 
     const initial = lokasi.nama.charAt(0).toUpperCase() || 'L';
     

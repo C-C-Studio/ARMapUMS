@@ -164,6 +164,7 @@ function startNavigationMode() {
     if (elements.routeInfoPanel) elements.routeInfoPanel.classList.add('translate-y-full');
     elements.cancelNavBtn.style.display = 'flex';
     elements.snapToRoadBtn.style.display = 'flex';
+
     state.isSnapToRoadActive = true;
     elements.snapToRoadBtn.classList.remove('bg-gray-500');
     elements.snapToRoadBtn.classList.add('bg-blue-500');

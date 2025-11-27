@@ -36,7 +36,8 @@ export function setupUI(map) {
         } else {
             // AMBIL NAMA & DESKRIPSI dari elemen HTML
             const namaAsli = item.querySelector('h3').textContent; 
-            const deskripsiAsli = item.querySelector('p').textContent; // Ambil teks dari tag <p>
+            // const deskripsiAsli = item.querySelector('p').textContent; // Ambil teks dari tag <p>
+            const deskripsiAsli = item.dataset.desc;
 
             // PANGGIL handleRouteRequest dengan parameter lengkap
             handleRouteRequest(item.dataset.lat, item.dataset.lon, namaAsli, deskripsiAsli);
