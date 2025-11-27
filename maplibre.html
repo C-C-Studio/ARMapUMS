@@ -73,20 +73,29 @@
         </button> -->
 
         <div id="ar-container" class="absolute top-0 left-0 right-0 h-full z-30" style="display: none;">
-            <button type="button" id="close-ar-btn" title="Tutup AR" class="absolute top-20 right-5 z-50 bg-red-500 text-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-xl" style="display: none;">
-                <i class="fas fa-times"></i>
-            </button>
+            
+            <div id="ar-turn-indicator" class="absolute top-0 left-0 w-full bg-blue-600 text-white p-4 flex justify-between items-center shadow-lg z-50 hidden" style="border-bottom-left-radius: 15px; border-bottom-right-radius: 15px;">
+                
+                <div id="ar-turn-content" class="flex items-center transition-opacity duration-300">
+                    <div class="bg-white/20 p-2 rounded-full mr-4">
+                        <img id="ar-turn-icon" src="assets/2DAssets/ArrowBelok.png" class="w-8 h-8 object-contain transition-transform duration-300">
+                    </div>
+                    <div class="flex flex-col">
+                        <span id="ar-turn-distance" class="text-2xl font-bold">0 m</span>
+                        <span id="ar-turn-instruction" class="text-sm font-medium opacity-90">Belok Kiri</span>
+                    </div>
+                </div>
 
-            <div id="ar-scanning-text"
-                class="absolute inset-0 flex items-center justify-center text-white text-lg font-semibold"
-                style="text-shadow: 0 0 10px black; background: rgba(0,0,0,0.3); display: none; z-index: 40;">
+                <button type="button" id="close-ar-btn" title="Tutup AR" class="text-white text-2xl font-bold px-4 py-2 opacity-80 hover:opacity-100 active:scale-90 transition-all">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div id="ar-scanning-text" class="absolute inset-0 flex items-center justify-center text-white text-lg font-semibold" style="text-shadow: 0 0 10px black; background: rgba(0,0,0,0.3); display: none; z-index: 40;">
                 🔍 Gerakkan HP untuk mendeteksi lantai...
             </div>
             
-            <div id="ar-danger-screen" 
-                class="absolute inset-0 pointer-events-none z-40 animate-pulse" 
-                style="display: none; box-shadow: inset 0 0 80px rgba(255, 0, 0, 0.8), inset 0 0 20px rgba(255, 0, 0, 1); border: 4px solid rgba(255,0,0,0.6);">
-            </div>
+            <div id="ar-danger-screen" class="absolute inset-0 pointer-events-none z-40 animate-pulse" style="display: none; box-shadow: inset 0 0 80px rgba(255, 0, 0, 0.8), inset 0 0 20px rgba(255, 0, 0, 1); border: 4px solid rgba(255,0,0,0.6);"></div>
 
             <div id="ar-wrong-way" class="absolute top-32 left-1/2 -translate-x-1/2 bg-red-600/90 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-3 z-50 animate-pulse" style="display: none;">
                 <i class="fas fa-undo-alt text-xl"></i> <span>SALAH ARAH</span>
