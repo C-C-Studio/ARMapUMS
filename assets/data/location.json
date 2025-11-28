@@ -1,6 +1,7 @@
 [
   {
     "id": "gsw",
+    "icon": "building",
     "nama": "Gedung Induk Siti Walidah (Siwal)",
     "deskripsi": "Kantor Pusat UMS.",
     "lat": -7.55809, 
@@ -8,13 +9,15 @@
   },
   {
     "id": "gedung_j",
+    "icon": "J",
     "nama": "Gedung J: Fakultas Komunikasi dan Informatika",
-    "deskripsi": "Prodi Ilmu Komunikasi, Teknik Informatika, dan Sistem Informasi.",
+    "deskripsi": "Ilmu Komunikasi, Teknik Informatika, dan Sistem Informasi.",
     "lat": -7.55670,
     "lon": 110.77115
   },
   {
-    "id": "masjid_sudjalmiyah",
+    "id": "masjid_sudalmiyah",
+    "icon": "mosque",
     "nama": "Masjid Sudalmiyah Rais",
     "deskripsi": "Masjid Kampus 2 UMS.",
     "lat": -7.55615,
@@ -22,8 +25,9 @@
   },
   {
     "id": "test",
+    "icon": "T",
     "nama": "Gedung Test: Fakultas Test dan Test",
-    "deskripsi": "Prodi Ilmu Test, Teknik Test, dan Sistem Test.",
+    "deskripsi": "Ilmu Test, Teknik Test, dan Sistem Test.",
     "lat": -7.541181,
     "lon": 110.623435
   }

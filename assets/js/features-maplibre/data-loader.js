@@ -114,14 +114,33 @@ function createLocationListItem(lokasi) {
     itemDiv.dataset.lon = lokasi.lon;
     itemDiv.dataset.desc = lokasi.deskripsi;
 
-    const initial = lokasi.nama.charAt(0).toUpperCase() || 'L';
+    let iconContent;
+    const iconType = lokasi.icon ? lokasi.icon.toLowerCase() : '';
+
+    if (iconType === 'mosque') {
+        // Jika tipe masjid -> Gunakan Icon Masjid
+        iconContent = '<i class="fas fa-mosque text-lg"></i>';
+    } else if (iconType === 'building') {
+        // Jika tipe building (Siwal) -> Gunakan Icon Gedung
+        iconContent = '<i class="fas fa-building text-lg"></i>';
+    } else {
+        // Default: Gunakan Huruf
+        // Jika di JSON icon="J", pakai itu. Jika tidak, ambil huruf pertama nama.
+        const letter = (lokasi.icon && lokasi.icon.length <= 2) 
+                       ? lokasi.icon.toUpperCase() 
+                       : (lokasi.nama.charAt(0).toUpperCase() || 'X');
+        
+        iconContent = `<span class="text-xl">${letter}</span>`;
+    }
     
     itemDiv.innerHTML = `
-        <div class="flex-shrink-0 w-10 h-10 rounded-full bg-purple-200 text-purple-700 flex items-center justify-center font-bold">
-            ${initial}
+        <div class="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 text-gray-600 flex items-center justify-center font-bold shadow-sm">
+            ${iconContent} 
         </div>
         
-        <div class="flex-grow min-w-0 flex flex-col gap-0.5 w-[60%]"> <div class="marquee-container">
+        <div class="flex-grow min-w-0 flex flex-col gap-0.5 w-[60%]">
+            
+            <div class="marquee-container">
                 <h3 class="marquee-content text-white font-semibold text-base">
                     ${lokasi.nama}
                 </h3>

@@ -86,8 +86,10 @@ export function setupUI(map) {
         const items = allLocationsList.getElementsByClassName('location-item');
         
         Array.from(items).forEach(item => {
-            const namaLokasi = item.dataset.nama.toLowerCase();
-            if (namaLokasi.includes(searchTerm)) {
+            // const namaLokasi = item.dataset.nama.toLowerCase();
+            const namaLokasi = item.dataset.nama ? item.dataset.nama.toLowerCase() : "";
+            const deskripsiLokasi = item.dataset.desc ? item.dataset.desc.toLowerCase() : "";
+            if (namaLokasi.includes(searchTerm) || deskripsiLokasi.includes(searchTerm)) {
                 item.style.display = 'flex';
             } else {
                 item.style.display = 'none';
