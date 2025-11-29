@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Peta Kampus UMS (MapLibre)</title>
-    
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 
@@ -21,23 +22,57 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-        ::placeholder { color: #9ca3af; }
-        .maplibregl-popup-content { background: none; box-shadow: none; padding: 0; }
-        
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        ::placeholder {
+            color: #9ca3af;
+        }
+
+        .maplibregl-popup-content {
+            background: none;
+            box-shadow: none;
+            padding: 0;
+        }
+
         /* Style Marker User */
-        .user-location-marker { position: relative; width: 22px; height: 22px; pointer-events: none; }
-        .user-location-dot { 
-            width: 18px; height: 18px; border-radius: 50%; background-color: #1a73e8; 
-            border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.4); 
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2; 
+        .user-location-marker {
+            position: relative;
+            width: 22px;
+            height: 22px;
+            pointer-events: none;
         }
-        .user-location-heading { 
-            width: 60px; height: 60px; position: absolute; top: 50%; left: 50%; 
-            transform: translate(-50%, -50%) rotate(0deg); transform-origin: center center; 
-            background: conic-gradient( from 300deg at 50% 50%, #1a73e84D 0deg, #1a73e84D 120deg, transparent 120.1deg, transparent 360deg ); 
-            border-radius: 50%; z-index: 1; transition: transform 0.2s ease-out; 
+
+        .user-location-dot {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background-color: #1a73e8;
+            border: 2px solid white;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.4);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
         }
+
+        .user-location-heading {
+            width: 60px;
+            height: 60px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(0deg);
+            transform-origin: center center;
+            background: conic-gradient(from 300deg at 50% 50%, #1a73e84D 0deg, #1a73e84D 120deg, transparent 120.1deg, transparent 360deg);
+            border-radius: 50%;
+            z-index: 1;
+            transition: transform 0.2s ease-out;
+        }
+
         /* Running text search panel */
         .marquee-container {
             overflow: hidden;
@@ -47,25 +82,42 @@
             mask-image: linear-gradient(to right, black 90%, transparent 100%);
             -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%);
         }
+
         .marquee-content {
             display: inline-block;
             /* Default: diam */
             transform: translateX(0);
         }
+
         .auto-scroll-active {
             animation: scroll-pingpong 4s linear infinite alternate;
-            animation-delay: 1s; /* Jeda 1 detik sebelum mulai gerak */
+            animation-delay: 1s;
+            /* Jeda 1 detik sebelum mulai gerak */
         }
+
         @keyframes scroll-pingpong {
-            0%, 20% { transform: translateX(0); } /* Diam sebentar di awal */
-            80%, 100% { transform: translateX(var(--scroll-dist)); } /* Scroll ke ujung */
+
+            0%,
+            20% {
+                transform: translateX(0);
+            }
+
+            /* Diam sebentar di awal */
+            80%,
+            100% {
+                transform: translateX(var(--scroll-dist));
+            }
+
+            /* Scroll ke ujung */
         }
     </style>
 </head>
+
 <body class="bg-gray-400">
 
-    <div class="w-full max-w-md mx-auto h-[100dvh] md:h-[90vh] md:max-h-[800px] bg-white shadow-xl relative overflow-hidden md:rounded-3xl">
-        
+    <div
+        class="w-full max-w-md mx-auto h-[100dvh] md:h-[90vh] md:max-h-[800px] bg-white shadow-xl relative overflow-hidden md:rounded-3xl">
+
         <div id="map" class="absolute top-0 left-0 right-0 bottom-0 z-0"></div>
 
         <!-- <button id="debug-teleport-btn" class="absolute top-24 left-4 z-50 bg-gray-800 text-white px-4 py-3 rounded-xl shadow-lg font-bold text-xs flex items-center gap-2 border-2 border-white" style="display: flex;">
@@ -73,12 +125,15 @@
         </button> -->
 
         <div id="ar-container" class="absolute top-0 left-0 right-0 h-full z-30" style="display: none;">
-            
-            <div id="ar-turn-indicator" class="absolute top-0 left-0 w-full bg-blue-600 text-white p-4 flex justify-between items-center shadow-lg z-50 hidden" style="border-bottom-left-radius: 15px; border-bottom-right-radius: 15px;">
-                
+
+            <div id="ar-turn-indicator"
+                class="absolute top-0 left-0 w-full bg-blue-600 text-white p-4 flex justify-between items-center shadow-lg z-50 hidden"
+                style="border-bottom-left-radius: 15px; border-bottom-right-radius: 15px;">
+
                 <div id="ar-turn-content" class="flex items-center transition-opacity duration-300">
                     <div class="bg-white/20 p-2 rounded-full mr-4">
-                        <img id="ar-turn-icon" src="assets/2DAssets/ArrowBelok.png" class="w-8 h-8 object-contain transition-transform duration-300">
+                        <img id="ar-turn-icon" src="assets/2DAssets/ArrowBelok.png"
+                            class="w-8 h-8 object-contain transition-transform duration-300">
                     </div>
                     <div class="flex flex-col">
                         <span id="ar-turn-distance" class="text-2xl font-bold">0 m</span>
@@ -86,45 +141,69 @@
                     </div>
                 </div>
 
-                <button type="button" id="close-ar-btn" title="Tutup AR" class="text-white text-2xl font-bold px-4 py-2 opacity-80 hover:opacity-100 active:scale-90 transition-all">
+                <button type="button" id="close-ar-btn" title="Tutup AR"
+                    class="text-white text-2xl font-bold px-4 py-2 opacity-80 hover:opacity-100 active:scale-90 transition-all">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
 
-            <div id="ar-scanning-text" class="absolute inset-0 flex items-center justify-center text-white text-lg font-semibold" style="text-shadow: 0 0 10px black; background: rgba(0,0,0,0.3); display: none; z-index: 40;">
+            <div id="ar-scanning-text"
+                class="absolute inset-0 flex items-center justify-center text-white text-lg font-semibold"
+                style="text-shadow: 0 0 10px black; background: rgba(0,0,0,0.3); display: none; z-index: 40;">
                 🔍 Gerakkan HP untuk mendeteksi lantai...
             </div>
-            
-            <div id="ar-danger-screen" class="absolute inset-0 pointer-events-none z-40 animate-pulse" style="display: none; box-shadow: inset 0 0 80px rgba(255, 0, 0, 0.8), inset 0 0 20px rgba(255, 0, 0, 1); border: 4px solid rgba(255,0,0,0.6);"></div>
 
-            <div id="ar-wrong-way" class="absolute top-32 left-1/2 -translate-x-1/2 bg-red-600/90 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-3 z-50 animate-pulse" style="display: none;">
+            <div id="ar-danger-screen" class="absolute inset-0 pointer-events-none z-40 animate-pulse"
+                style="display: none; box-shadow: inset 0 0 80px rgba(255, 0, 0, 0.8), inset 0 0 20px rgba(255, 0, 0, 1); border: 4px solid rgba(255,0,0,0.6);">
+            </div>
+
+            <div id="ar-wrong-way"
+                class="absolute top-32 left-1/2 -translate-x-1/2 bg-red-600/90 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-3 z-50 animate-pulse"
+                style="display: none;">
                 <i class="fas fa-undo-alt text-xl"></i> <span>SALAH ARAH</span>
             </div>
 
-            <div id="ar-map-overlay" class="absolute left-1/2 bottom-6 -translate-x-1/2 w-[92%] h-56 rounded-3xl overflow-hidden shadow-2xl bg-white z-50" style="display:none;">
+            <div id="ar-map-overlay"
+                class="absolute left-1/2 bottom-6 -translate-x-1/2 w-[92%] h-56 rounded-3xl overflow-hidden shadow-2xl bg-white z-50"
+                style="display:none;">
                 <div id="ar-map-inner" class="w-full h-full"></div>
             </div>
         </div>
 
-        <div id="compass-indicator" class="absolute top-24 left-5 z-10 w-20 h-20 rounded-full bg-white/80 backdrop-blur-sm shadow-lg flex justify-center items-center text-gray-800 font-bold text-sm" style="display: none;"> <span class="absolute top-1.5">N</span><span class="absolute right-2.5">E</span><span class="absolute bottom-1.5">S</span><span class="absolute left-2.5">W</span><div id="compass-needle" class="absolute w-full h-full" style="transform: rotate(0deg); transition: transform 0.2s ease-out;"><i class="fas fa-long-arrow-alt-up text-red-600 text-3xl absolute top-1 left-1/2 -translate-x-1/2"></i><i class="fas fa-long-arrow-alt-down text-gray-500 text-xl absolute bottom-1 left-1/2 -translate-x-1/2"></i></div></div>
-        
-        <div id="degree-indicator" class="absolute top-48 left-5 z-10 w-20 p-2 rounded-lg bg-white/80 backdrop-blur-sm shadow-lg flex justify-center items-center text-gray-800 font-bold text-lg" style="display: none;">0°</div>
-        
-        <header class="absolute top-0 left-0 right-0 z-10 text-white flex justify-center items-center p-5 bg-gradient-to-b from-black/60 to-transparent">
+        <div id="compass-indicator"
+            class="absolute top-24 left-5 z-10 w-20 h-20 rounded-full bg-white/80 backdrop-blur-sm shadow-lg flex justify-center items-center text-gray-800 font-bold text-sm"
+            style="display: none;"> <span class="absolute top-1.5">N</span><span
+                class="absolute right-2.5">E</span><span class="absolute bottom-1.5">S</span><span
+                class="absolute left-2.5">W</span>
+            <div id="compass-needle" class="absolute w-full h-full"
+                style="transform: rotate(0deg); transition: transform 0.2s ease-out;"><i
+                    class="fas fa-long-arrow-alt-up text-red-600 text-3xl absolute top-1 left-1/2 -translate-x-1/2"></i><i
+                    class="fas fa-long-arrow-alt-down text-gray-500 text-xl absolute bottom-1 left-1/2 -translate-x-1/2"></i>
+            </div>
+        </div>
+
+        <div id="degree-indicator"
+            class="absolute top-48 left-5 z-10 w-20 p-2 rounded-lg bg-white/80 backdrop-blur-sm shadow-lg flex justify-center items-center text-gray-800 font-bold text-lg"
+            style="display: none;">0°</div>
+
+        <header
+            class="absolute top-0 left-0 right-0 z-10 text-white flex justify-center items-center p-5 bg-gradient-to-b from-black/60 to-transparent">
             <img src="assets/images/Resmi_Logo_UMS_White_ShortText.png" alt="logo" class="h-8 mt-2">
             <button id="open-search-btn" class="text-xl absolute right-5" title="Search locations">
                 <i class="mr-2 mt-2 fas fa-search"></i>
             </button>
         </header>
-        
-        <div id="search-panel" class="absolute inset-0 z-30 bg-[#0c2340]/70 backdrop-blur-md flex flex-col transition-transform duration-300 ease-in-out -translate-y-full">
+
+        <div id="search-panel"
+            class="absolute inset-0 z-30 bg-[#0c2340]/70 backdrop-blur-md flex flex-col transition-transform duration-300 ease-in-out -translate-y-full">
             <main class="flex-grow p-5 overflow-y-auto">
                 <div class="flex items-center gap-4 mb-6">
                     <button id="close-search-btn" class="text-white text-xl" title="Back to Map">
                         <i class="fas fa-arrow-left" aria-hidden="true"></i>
                     </button>
                     <div class="relative flex-grow">
-                        <input type="text" id="search-input" placeholder="Cari nama gedung atau lokasi..." class="w-full bg-white/90 text-gray-900 py-3 pl-5 pr-12 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                        <input type="text" id="search-input" placeholder="Cari nama gedung atau lokasi..."
+                            class="w-full bg-white/90 text-gray-900 py-3 pl-5 pr-12 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400">
                         <i class="fas fa-search text-gray-500 absolute right-4 top-1/2 -translate-y-1/2"></i>
                     </div>
                 </div>
@@ -139,9 +218,10 @@
             </main>
         </div>
 
-        <div id="route-info-panel" class="absolute bottom-0 left-0 right-0 z-20 bg-white/50 backdrop-blur-md rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.1)] p-6 transform transition-transform duration-300 translate-y-full">
+        <div id="route-info-panel"
+            class="absolute bottom-0 left-0 right-0 z-20 bg-white/50 backdrop-blur-md rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.1)] p-6 transform transition-transform duration-300 translate-y-full">
             <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-4"></div>
-            
+
             <div class="mb-4">
                 <h2 id="route-dest-name" class="text-xl font-bold text-gray-900 leading-tight mb-1">Nama Tujuan</h2>
                 <div class="flex items-center gap-3 text-gray-600 text-sm font-medium">
@@ -154,37 +234,46 @@
                 </div>
             </div>
 
-            <button id="start-nav-btn" class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+            <button id="start-nav-btn"
+                class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
                 <i class="fas fa-location-arrow"></i>
                 MULAI NAVIGASI
             </button>
         </div>
 
-        <div id="distance-indicator" 
-             class="absolute bottom-16 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur-sm text-blue-600 px-6 py-3 rounded-full shadow-xl font-bold text-base border-2 border-blue-100 flex items-center justify-center gap-2 transition-all transform" 
-             style="display: none;">
+        <div id="distance-indicator"
+            class="absolute bottom-16 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur-sm text-blue-600 px-6 py-3 rounded-full shadow-xl font-bold text-base border-2 border-blue-100 flex items-center justify-center gap-2 transition-all transform"
+            style="display: none;">
             <i class="fas fa-flag-checkered text-blue-500"></i>
             <span id="distance-text">0 m</span>
         </div>
 
         <div class="absolute mb-12 bottom-52 right-6 z-10 flex flex-col gap-3">
-            <button id="cancel-nav-btn" title="Cancel Navigation" class="bg-red-500 text-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-xl" style="display: none;">
+            <button id="cancel-nav-btn" title="Cancel Navigation"
+                class="bg-red-500 text-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-xl"
+                style="display: none;">
                 <i class="fas fa-times"></i>
             </button>
-            <button id="snap-to-road-btn" title="Snap to Road (Nonaktif)" class="bg-gray-500 text-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-xl" style="display: none;">
+            <button id="snap-to-road-btn" title="Snap to Road (Nonaktif)"
+                class="bg-gray-500 text-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-xl"
+                style="display: none;">
                 <i class="fas fa-road"></i>
             </button>
         </div>
 
-        <button type="button" id="ar-btn" title="Enter AR Mode" class="absolute mb-12 bottom-36 right-6 z-10 bg-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-gray-700 text-xl" style="display: none;">
+        <button type="button" id="ar-btn" title="Enter AR Mode"
+            class="absolute mb-12 bottom-36 right-6 z-10 bg-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-gray-700 text-xl"
+            style="display: none;">
             <i class="fas fa-vr-cardboard"></i>
         </button>
-        
-        <button id="locate-btn" title="Locate My Position" class="absolute mb-12 bottom-20 right-6 z-10 bg-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-gray-700 text-xl">
+
+        <button id="locate-btn" title="Locate My Position"
+            class="absolute mb-12 bottom-20 right-6 z-10 bg-white w-14 h-14 rounded-full shadow-lg flex justify-center items-center text-gray-700 text-xl">
             <i class="fas fa-location-crosshairs"></i>
         </button>
 
-        <nav id="bottom-navbar" class="absolute bottom-0 left-0 right-0 z-10 bg-[#0c2340]/70 backdrop-blur-md text-white flex justify-around py-3 h-16 transition-transform duration-300 ease-in-out">
+        <nav id="bottom-navbar"
+            class="absolute bottom-0 left-0 right-0 z-10 bg-[#0c2340]/70 backdrop-blur-md text-white flex justify-around py-3 h-16 transition-transform duration-300 ease-in-out">
             <a href="index.html" class="flex flex-col items-center justify-center text-gray-400 hover:text-white w-1/4">
                 <i class="fas fa-home text-xl mb-1"></i>
                 <span class="text-xs">Home</span>
@@ -196,22 +285,28 @@
         </nav>
     </div>
 
-    <div id="arrival-modal" class="fixed inset-0 z-[70] hidden flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 transition-opacity duration-300">
-        <div class="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl transform scale-100 transition-all animate-bounce-in">
-            
-            <div class="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-5 text-4xl shadow-inner">
+    <div id="arrival-modal"
+        class="fixed inset-0 z-[70] hidden flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 transition-opacity duration-300">
+        <div
+            class="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl transform scale-100 transition-all animate-bounce-in">
+
+            <div
+                class="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-5 text-4xl shadow-inner">
                 <i class="fas fa-check-circle"></i>
             </div>
 
             <h2 class="text-gray-400 font-semibold text-xs uppercase tracking-widest mb-1">You have arrived</h2>
             <h1 class="text-2xl font-bold text-gray-800 mb-1">Welcome to,</h1>
-            
+
             <div class="bg-blue-50 rounded-xl p-4 my-4 border border-blue-100">
-                <h3 id="arrival-dest-name" class="text-blue-700 text-xl font-extrabold leading-tight mb-1">Nama Lokasi</h3>
-                <p id="arrival-dest-desc" class="text-gray-600 text-sm font-medium">Deskripsi lokasi akan muncul di sini.</p>
+                <h3 id="arrival-dest-name" class="text-blue-700 text-xl font-extrabold leading-tight mb-1">Nama Lokasi
+                </h3>
+                <p id="arrival-dest-desc" class="text-gray-600 text-sm font-medium">Deskripsi lokasi akan muncul di
+                    sini.</p>
             </div>
 
-            <button id="arrival-done-btn" class="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-500/30">
+            <button id="arrival-done-btn"
+                class="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-500/30">
                 Finish
             </button>
         </div>
@@ -223,4 +318,5 @@
     <script type="module" src="assets/js/main-maplibre.js"></script>
 
 </body>
+
 </html>
