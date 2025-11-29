@@ -13,6 +13,7 @@ const TURN_ARROW_OFFSET = 40;
 
 const COMPASS_TURN_ANGLE_THRESHOLD = 25;
 const TURN_DISTANCE_THRESHOLD = 25; // Jarak deteksi belokan (Meter) - Disesuaikan agar UI muncul lebih awal
+const UI_TURN_NOTIFY_DIST = 50;
 const TURN_ANGLE_THRESHOLD = 30;    // Derajat
 const GROUND_ARROW_SPAWN_DIST = 10.0; 
 
@@ -46,7 +47,7 @@ const arTurnIndicator = document.getElementById('ar-turn-indicator');
 const arTurnIcon = document.getElementById('ar-turn-icon');
 const arTurnDistance = document.getElementById('ar-turn-distance');
 const arTurnInstruction = document.getElementById('ar-turn-instruction');
-
+const arTurnContent = document.getElementById('ar-turn-content');
 
 // --- MINI MAP ---
 function initMiniMap() {
@@ -286,54 +287,57 @@ function onARFrame(time, frame) {
     }
 }
 
-// GANTI FUNGSI INI DI ar-navigation.js
-
 function checkNavigationStatus() {
     if (!state.currentRouteLine || !state.userLocation) return;
 
     const userPt = turf.point(state.userLocation);
     const line = state.currentRouteLine;
+    const coords = line.coordinates;
+    
+    // Cari index posisi user di garis rute
     const snapped = turf.nearestPointOnLine(line, userPt);
     const currentIdx = snapped.properties.index;
-    const coords = line.coordinates;
 
     let turnFound = false;
 
-    // PERUBAHAN 1: Loop sampai akhir rute (atau batas tertentu yang jauh)
-    // Sebelumnya hanya scanning 4 titik (Math.min(currentIdx + 4)), itu terlalu pendek.
-    // Kita scan sampai akhir untuk menemukan "Next Turn" dimanapun berada.
+    // 1. LOOPING MENCARI BELOKAN DI DEPAN
     for (let i = currentIdx; i < coords.length - 2; i++) {
         const p1 = coords[i];
         const p2 = coords[i+1];
         const p3 = coords[i+2];
 
-        // Hitung sudut
+        // Hitung sudut antar segmen
         const bearing1 = turf.bearing(turf.point(p1), turf.point(p2));
         const bearing2 = turf.bearing(turf.point(p2), turf.point(p3));
         
         let angleDiff = Math.abs(bearing1 - bearing2);
         if (angleDiff > 180) angleDiff = 360 - angleDiff;
 
-        // Jika ditemukan belokan tajam (> 30 derajat)
+        // JIKA KETEMU BELOKAN TAJAM
         if (angleDiff > TURN_ANGLE_THRESHOLD) {
             turnFound = true;
             
-            // Hitung jarak Real-time dari User ke Titik Belokan (p2)
+            // Hitung jarak user ke titik belokan
             const distToTurn = turf.distance(userPt, turf.point(p2), { units: 'kilometers' }) * 1000;
 
-            // --- BAGIAN UI (SELALU MUNCUL) ---
-            // Tentukan Kiri/Kanan
+            // --- LOGIKA UI (MODIFIKASI) ---
+            
+            // Tentukan arah belokan (Kiri/Kanan)
             let turnDirectionSigned = (bearing2 - bearing1 + 540) % 360 - 180;
             let isRightTurn = turnDirectionSigned > 0;
-            
-            // PERUBAHAN 2: Update UI Bar TANPA mengecek threshold jarak
-            // UI akan menampilkan "150m - Belok Kanan" misalnya.
-            updateTurnUI(true, distToTurn, isRightTurn);
+            let directionStr = isRightTurn ? 'right' : 'left';
 
+            if (distToTurn <= UI_TURN_NOTIFY_DIST) {
+                // KONDISI A: Dekat belokan (<= 50m) -> Tampilkan Panah BELOK
+                updateTurnUI(true, distToTurn, directionStr);
+            } else {
+                // KONDISI B: Masih jauh (> 50m) -> Tampilkan Panah LURUS
+                // Teks tetap "Lurus", tapi jaraknya menghitung mundur ke belokan itu
+                updateTurnUI(true, distToTurn, 'straight');
+            }
 
-            // --- BAGIAN PANAH 3D (TETAP PAKAI THRESHOLD) ---
-            // Kita hanya spawn panah 3D di lantai jika sudah DEKAT (< 25m)
-            // Supaya user tidak melihat panah melayang jauh di angkasa/tembok
+            // --- LOGIKA ARROW 3D (LANTAI) ---
+            // Panah 3D tetap hanya muncul jika SANGAT DEKAT (< 25m) agar tidak mengganggu
             if (distToTurn < TURN_DISTANCE_THRESHOLD) {
                 if (!isTurnActive) {
                     isTurnActive = true;
@@ -341,63 +345,77 @@ function checkNavigationStatus() {
                     turnBearing = (bearing2 + 360) % 360; 
                 }
             } else {
-                // Jika belokan masih jauh (> 25m), matikan mode 3D arrow 
-                // tapi UI tetap nyala (karena turnFound = true)
-                if (isTurnActive) {
-                    isTurnActive = false;
-                    isGroundArrowPlaced = false;
-                    if (groundArrowObject) groundArrowObject.visible = false;
-                    if (arReticle) arReticle.visible = false;
-                }
+                // Jika menjauh/belum sampai, matikan arrow 3D
+                if (isTurnActive) resetTurnLogic();
             }
 
-            // Kita sudah nemu belokan terdekat, stop scanning.
-            return; 
+            return; // Stop scanning karena sudah nemu belokan terdekat
         }
     }
 
-    // Jika sampai akhir rute TIDAK ada belokan lagi (Jalan Lurus sampai finish)
+    // 2. JIKA TIDAK ADA BELOKAN (Jalan Lurus sampai Finish)
     if (!turnFound) {
-        // Opsional: Bisa sembunyikan UI atau tampilkan jarak ke Finish
-        // Di sini kita sembunyikan saja agar bersih
-        updateTurnUI(false); 
+        // Hitung jarak ke titik terakhir (Tujuan)
+        const lastCoord = coords[coords.length - 1];
+        const distToFinish = turf.distance(userPt, turf.point(lastCoord), { units: 'kilometers' }) * 1000;
 
-        // Matikan panah 3D
-        if (isTurnActive) {
-            isTurnActive = false;
-            isGroundArrowPlaced = false; 
-            if (groundArrowObject) groundArrowObject.visible = false;
-            if (arReticle) arReticle.visible = false;
-        }
+        // KONDISI C: Lurus Terus -> Tampilkan Panah LURUS
+        updateTurnUI(true, distToFinish, 'straight');
+
+        // Pastikan panah 3D belokan mati
+        if (isTurnActive) resetTurnLogic();
     }
 }
 
+// Helper kecil untuk mereset logika 3D (agar kode lebih rapi)
+function resetTurnLogic() {
+    isTurnActive = false;
+    isGroundArrowPlaced = false;
+    if (groundArrowObject) groundArrowObject.visible = false;
+    if (arReticle) arReticle.visible = false;
+}
+
+
 // --- FUNGSI UPDATE UI BAR ---
-function updateTurnUI(isVisible, distanceMeters = 0, isRightTurn = false) {
-    if (!arTurnIndicator) return;
+function updateTurnUI(isVisible, distanceMeters = 0, direction = 'straight') {
+    if (!arTurnIndicator || !arTurnContent) return;
 
-    if (!isVisible) {
-        arTurnIndicator.style.display = 'none'; // Gunakan style display langsung agar lebih kuat
-        arTurnIndicator.classList.add('hidden');
-        return;
-    }
-
-    // Tampilkan UI
+    // Pastikan Bar Utama SELALU MUNCUL
     arTurnIndicator.style.display = 'flex';
     arTurnIndicator.classList.remove('hidden');
 
-    // Update Text
-    if (arTurnDistance) arTurnDistance.innerText = `${Math.round(distanceMeters)} m`;
+    // Jika diperintahkan sembunyi (misal saat error/loading), sembunyikan isinya saja
+    if (!isVisible) {
+        arTurnContent.style.opacity = '0';
+        return;
+    }
+
+    arTurnContent.style.opacity = '1';
     
-    // Update Arah & Ikon
-    if (isRightTurn) {
-        if (arTurnInstruction) arTurnInstruction.innerText = "Belok Kanan";
-        // Flip ikon secara horizontal untuk belok kanan
-        if (arTurnIcon) arTurnIcon.style.transform = "scaleX(-1)"; 
-    } else {
-        if (arTurnInstruction) arTurnInstruction.innerText = "Belok Kiri";
-        // Reset flip untuk belok kiri (gambar default)
-        if (arTurnIcon) arTurnIcon.style.transform = "scaleX(1)"; 
+    // Update Jarak
+    if (arTurnDistance) arTurnDistance.innerText = `${Math.round(distanceMeters)} m`;
+
+    // Reset Transformasi & Gambar
+    if (arTurnIcon) {
+        arTurnIcon.style.transform = "none"; // Reset rotasi/flip
+        
+        if (direction === 'straight') {
+            // MODE LURUS
+            arTurnIcon.src = "assets/2DAssets/arrow.png"; // Pastikan file ini ada
+            if (arTurnInstruction) arTurnInstruction.innerText = "Lurus Terus";
+        
+        } else if (direction === 'right') {
+            // MODE BELOK KANAN
+            arTurnIcon.src = "assets/2DAssets/ArrowBelok.png"; 
+            arTurnIcon.style.transform = "scaleX(-1)"; // Flip ke kanan
+            if (arTurnInstruction) arTurnInstruction.innerText = "Belok Kanan";
+        
+        } else {
+            // MODE BELOK KIRI
+            arTurnIcon.src = "assets/2DAssets/ArrowBelok.png";
+            // Default gambar ArrowBelok adalah kiri, jadi tidak perlu transform
+            if (arTurnInstruction) arTurnInstruction.innerText = "Belok Kiri";
+        }
     }
 }
 
